@@ -48,9 +48,9 @@ export default function DashboardPage() {
             <p className="text-blue-100 mb-4">
               Ready to continue your learning journey?
             </p>
-            <button className="bg-white text-blue-600 px-6 py-3 rounded-lg font-semibold hover:bg-blue-50 transition">
+            <a href="/learn" className="inline-block bg-white text-blue-600 px-6 py-3 rounded-lg font-semibold hover:bg-blue-50 transition">
               Start Learning →
-            </button>
+            </a>
           </div>
 
           {/* Stats Grid */}
@@ -189,7 +189,7 @@ export default function DashboardPage() {
                   Quick Actions
                 </h3>
                 <div className="space-y-3">
-                  <button className="w-full text-left px-4 py-3 bg-blue-50 hover:bg-blue-100 rounded-lg transition">
+                  <a href="/learn" className="block w-full text-left px-4 py-3 bg-blue-50 hover:bg-blue-100 rounded-lg transition">
                     <div className="flex items-center space-x-3">
                       <span className="text-2xl">📖</span>
                       <div>
@@ -197,9 +197,9 @@ export default function DashboardPage() {
                         <p className="text-xs text-gray-600">15 cards waiting</p>
                       </div>
                     </div>
-                  </button>
+                  </a>
 
-                  <button className="w-full text-left px-4 py-3 bg-green-50 hover:bg-green-100 rounded-lg transition">
+                  <a href="/learn" className="block w-full text-left px-4 py-3 bg-green-50 hover:bg-green-100 rounded-lg transition">
                     <div className="flex items-center space-x-3">
                       <span className="text-2xl">🎓</span>
                       <div>
@@ -207,7 +207,7 @@ export default function DashboardPage() {
                         <p className="text-xs text-gray-600">5 available</p>
                       </div>
                     </div>
-                  </button>
+                  </a>
 
                   <button className="w-full text-left px-4 py-3 bg-purple-50 hover:bg-purple-100 rounded-lg transition">
                     <div className="flex items-center space-x-3">

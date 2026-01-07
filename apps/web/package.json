@@ -10,18 +10,19 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "next": "14.0.4",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
     "@nerdlearn/db": "workspace:*",
     "@tanstack/react-query": "^5.17.0",
     "axios": "^1.6.5",
-    "framer-motion": "^10.18.0",
-    "recharts": "^2.10.3",
-    "react-force-graph-2d": "^1.24.0",
-    "zustand": "^4.4.7",
     "clsx": "^2.1.0",
-    "tailwind-merge": "^2.2.0"
+    "framer-motion": "^10.18.0",
+    "next": "14.0.4",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-force-graph-2d": "^1.24.0",
+    "react-markdown": "^10.1.0",
+    "recharts": "^2.10.3",
+    "tailwind-merge": "^2.2.0",
+    "zustand": "^4.4.7"
   },
   "devDependencies": {
     "@types/node": "^20",
