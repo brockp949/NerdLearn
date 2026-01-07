@@ -1,5 +1,10 @@
 """
-Orchestrator Service - Learning Session Coordinator
+Orchestrator Service - Learning Session Coordinator (INTEGRATED VERSION)
+
+This version integrates with:
+- PostgreSQL database (via db.py)
+- Scheduler service (FSRS) for card scheduling
+- Inference service (ZPD) for adaptive difficulty
 
 Responsibilities:
 1. Coordinate learning sessions across all services
@@ -12,20 +17,24 @@ Responsibilities:
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from typing import List, Dict, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 import httpx
 import asyncio
 from collections import defaultdict
+import os
+
+# Import database module
+from db import db
 
 # ============================================================================
 # CONFIGURATION
 # ============================================================================
 
-SCHEDULER_URL = "http://localhost:8001"
-TELEMETRY_URL = "http://localhost:8002"
-INFERENCE_URL = "http://localhost:8003"
-CONTENT_URL = "http://localhost:8004"
+SCHEDULER_URL = os.getenv("SCHEDULER_URL", "http://localhost:8001")
+TELEMETRY_URL = os.getenv("TELEMETRY_URL", "http://localhost:8002")
+INFERENCE_URL = os.getenv("INFERENCE_URL", "http://localhost:8003")
+CONTENT_URL = os.getenv("CONTENT_URL", "http://localhost:8004")
 
 # ============================================================================
 # MODELS
@@ -94,8 +103,7 @@ class AnswerResponse(BaseModel):
 # IN-MEMORY SESSION STORE (TODO: Use Redis)
 # ============================================================================
 
-sessions: Dict[str, SessionState] = {}
-learner_profiles: Dict[str, Dict] = {}  # learner_id -> {xp, level, streak, etc.}
+sessions: Dict[str, Dict] = {}  # session_id -> session data
 
 
 # ============================================================================
@@ -168,7 +176,7 @@ class GamificationEngine:
 
     @staticmethod
     def check_achievements(
-        learner_profile: Dict,
+        total_xp: int,
         new_xp: int,
         new_streak: int,
         concepts_mastered: int
@@ -189,7 +197,6 @@ class GamificationEngine:
             achievements.append({"name": "Monthly Master", "icon": "🔥", "description": "30-day streak"})
 
         # XP achievements
-        total_xp = learner_profile.get("total_xp", 0) + new_xp
         if 1000 <= total_xp < 1000 + new_xp:
             achievements.append({"name": "XP Master", "icon": "⚡", "description": "Earned 1,000 XP"})
         elif 5000 <= total_xp < 5000 + new_xp:
@@ -209,94 +216,183 @@ class GamificationEngine:
 # ============================================================================
 
 app = FastAPI(
-    title="NerdLearn Orchestrator",
-    description="Learning session coordinator",
-    version="0.1.0"
+    title="NerdLearn Orchestrator (Integrated)",
+    description="Learning session coordinator with real service integration",
+    version="0.2.0"
 )
 
-http_client = httpx.AsyncClient()
 gamification = GamificationEngine()
 
 
 # ============================================================================
-# HELPER FUNCTIONS
+# HELPER FUNCTIONS - DATABASE INTEGRATION
 # ============================================================================
 
-def get_learner_profile(learner_id: str) -> Dict:
-    """Get or create learner profile"""
-    if learner_id not in learner_profiles:
-        learner_profiles[learner_id] = {
-            "total_xp": 0,
-            "level": 1,
-            "streak_days": 0,
-            "last_activity": None,
-            "concepts_mastered": 0
-        }
-    return learner_profiles[learner_id]
+async def get_due_cards_from_scheduler(learner_profile_id: str, limit: int = 20) -> List[str]:
+    """
+    Get card IDs due for review from Scheduler service via FSRS algorithm
 
+    Args:
+        learner_profile_id: Learner profile ID from database
+        limit: Maximum number of cards
 
-async def get_due_cards(learner_id: str, limit: int = 20) -> List[Dict]:
-    """Get cards due for review from Scheduler"""
+    Returns:
+        List of card IDs
+    """
     try:
-        # For demo, return mock cards
-        # TODO: Call actual scheduler service
-        return [
-            {
-                "card_id": f"card_{i}",
-                "concept_id": f"concept_{i}",
-                "difficulty": 5.0 + (i % 5),
-                "due_date": datetime.now().isoformat()
-            }
-            for i in range(min(limit, 5))
-        ]
+        # Try calling Scheduler service
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(
+                f"{SCHEDULER_URL}/due/{learner_profile_id}",
+                params={"limit": limit}
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                return [item['card_id'] for item in data]
+            else:
+                print(f"Scheduler returned {response.status_code}, falling back to database")
+
     except Exception as e:
-        print(f"Error getting due cards: {e}")
-        return []
+        print(f"Scheduler service unavailable: {e}, using database fallback")
+
+    # Fallback: Get due cards directly from database
+    return db.get_due_card_ids(learner_profile_id, limit)
 
 
-def create_learning_card(card_data: Dict, concept_name: str = "Python Functions") -> LearningCard:
-    """Convert card data to LearningCard"""
+async def assess_zpd_state(
+    learner_id: str,
+    concept_id: str,
+    recent_ratings: List[str],
+    current_difficulty: float
+) -> Dict:
+    """
+    Get ZPD assessment from Inference service
 
-    # Demo content (TODO: Load from database)
-    demo_content = {
-        "card_0": {
-            "content": "A **function** is a reusable block of code that performs a specific task. Functions help organize code and avoid repetition.",
-            "question": "What keyword is used to define a function in Python?",
-            "correct_answer": "def"
-        },
-        "card_1": {
-            "content": "**Parameters** are variables that you pass to a function. They allow functions to work with different inputs.",
-            "question": "How do you pass multiple parameters to a function?",
-            "correct_answer": "Separate them with commas"
-        },
-        "card_2": {
-            "content": "The **return** statement sends a value back from a function to where it was called.",
-            "question": "What happens if a function doesn't have a return statement?",
-            "correct_answer": "Returns None"
-        },
-        "card_3": {
-            "content": "**Recursion** is when a function calls itself. It's useful for problems that can be broken into smaller similar problems.",
-            "question": "What is the essential component of a recursive function?",
-            "correct_answer": "Base case"
-        },
-        "card_4": {
-            "content": "**Lambda functions** are small anonymous functions defined with the lambda keyword. They can have any number of parameters but only one expression.",
-            "question": "When would you use a lambda function instead of a regular function?",
-            "correct_answer": "For simple, one-line operations"
-        },
+    Args:
+        learner_id: User ID
+        concept_id: Concept ID
+        recent_ratings: List of recent ratings (last 10)
+        current_difficulty: Card difficulty
+
+    Returns:
+        ZPD state dict with zone, message, scaffolding
+    """
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.post(
+                f"{INFERENCE_URL}/zpd/assess",
+                json={
+                    "learner_id": learner_id,
+                    "concept_id": concept_id,
+                    "recent_performance": recent_ratings,
+                    "current_difficulty": current_difficulty
+                }
+            )
+
+            if response.status_code == 200:
+                return response.json()
+
+    except Exception as e:
+        print(f"Inference service unavailable: {e}, using fallback")
+
+    # Fallback: Simple success rate calculation
+    if not recent_ratings:
+        return {
+            "zone": "optimal",
+            "message": "Starting to learn this topic",
+            "scaffolding": None
+        }
+
+    success_count = sum(1 for r in recent_ratings if r in ["good", "easy"])
+    success_rate = success_count / len(recent_ratings)
+
+    if success_rate < 0.35:
+        return {
+            "zone": "frustration",
+            "message": "This is challenging. Let's add some help!",
+            "scaffolding": {
+                "type": "worked_example",
+                "content": "Remember to break down the problem into smaller steps.",
+                "show": True
+            }
+        }
+    elif success_rate > 0.70:
+        return {
+            "zone": "comfort",
+            "message": "You're doing great! Let's increase the challenge.",
+            "scaffolding": None
+        }
+    else:
+        return {
+            "zone": "optimal",
+            "message": "Perfect! You're in the optimal learning zone.",
+            "scaffolding": None
+        }
+
+
+async def update_fsrs_schedule(
+    learner_profile_id: str,
+    card_id: str,
+    rating: Rating
+) -> Dict:
+    """
+    Update FSRS schedule via Scheduler service
+
+    Args:
+        learner_profile_id: Learner profile ID
+        card_id: Card ID
+        rating: Review rating
+
+    Returns:
+        Updated schedule info
+    """
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.post(
+                f"{SCHEDULER_URL}/review",
+                json={
+                    "learner_id": learner_profile_id,
+                    "card_id": card_id,
+                    "rating": rating.value,
+                    "reviewed_at": datetime.utcnow().isoformat()
+                }
+            )
+
+            if response.status_code == 200:
+                return response.json()
+
+    except Exception as e:
+        print(f"Scheduler unavailable for review: {e}")
+
+    # Fallback: Simple interval calculation
+    interval_days = {
+        Rating.AGAIN: 0,
+        Rating.HARD: 1,
+        Rating.GOOD: 3,
+        Rating.EASY: 7
+    }[rating]
+
+    next_due = datetime.utcnow() + timedelta(days=interval_days)
+
+    return {
+        "new_stability": 2.5,
+        "new_difficulty": 5.0,
+        "interval_days": interval_days,
+        "next_due_date": next_due.isoformat()
     }
 
-    card_id = card_data["card_id"]
-    demo = demo_content.get(card_id, demo_content["card_0"])
 
+def convert_db_card_to_learning_card(card_data: Dict) -> LearningCard:
+    """Convert database card to LearningCard model"""
     return LearningCard(
-        card_id=card_id,
-        concept_name=concept_name,
-        content=demo["content"],
-        question=demo["question"],
-        correct_answer=demo["correct_answer"],
-        difficulty=card_data.get("difficulty", 5.0),
-        due_date=card_data.get("due_date")
+        card_id=card_data["card_id"],
+        concept_name=card_data["concept_name"],
+        content=card_data["content"],
+        question=card_data["question"],
+        correct_answer=card_data.get("correct_answer"),
+        difficulty=card_data["difficulty"],
+        due_date=None
     )
 
 
@@ -307,9 +403,31 @@ def create_learning_card(card_data: Dict, concept_name: str = "Python Functions"
 @app.get("/")
 async def root():
     return {
-        "service": "NerdLearn Orchestrator",
+        "service": "NerdLearn Orchestrator (Integrated)",
         "status": "operational",
-        "version": "0.1.0"
+        "version": "0.2.0",
+        "features": [
+            "Database integration",
+            "FSRS scheduling",
+            "ZPD adaptation",
+            "Real-time gamification"
+        ]
+    }
+
+
+@app.get("/health")
+async def health():
+    """Health check endpoint"""
+    # Check database connection
+    try:
+        db_healthy = db.pool is not None
+    except:
+        db_healthy = False
+
+    return {
+        "status": "healthy" if db_healthy else "degraded",
+        "database": "connected" if db_healthy else "disconnected",
+        "timestamp": datetime.utcnow().isoformat()
     }
 
 
@@ -318,218 +436,300 @@ async def start_session(request: SessionStartRequest):
     """
     Start a new learning session
 
-    1. Get due cards from Scheduler
-    2. Initialize session state
-    3. Return first card
+    1. Load learner profile from database
+    2. Get due cards from Scheduler/database
+    3. Load card content from database
+    4. Initialize session state
+    5. Return first card
     """
     try:
-        # Get due cards
-        due_cards = await get_due_cards(request.learner_id, request.limit)
+        # 1. Load learner profile
+        profile = db.load_learner_profile(request.learner_id)
 
-        if not due_cards:
+        if not profile:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Learner profile not found for user {request.learner_id}"
+            )
+
+        learner_profile_id = profile["id"]
+
+        # 2. Get due card IDs
+        due_card_ids = await get_due_cards_from_scheduler(learner_profile_id, request.limit)
+
+        if not due_card_ids:
             raise HTTPException(
                 status_code=404,
                 detail="No cards due for review"
             )
 
-        # Create session
+        # 3. Load card content from database
+        cards = db.load_cards(due_card_ids[:request.limit])
+
+        if not cards:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to load card content"
+            )
+
+        # 4. Create session
         session_id = f"session_{request.learner_id}_{int(datetime.now().timestamp())}"
 
-        # Get learner profile
-        profile = get_learner_profile(request.learner_id)
+        # Convert first card to LearningCard
+        first_card = convert_db_card_to_learning_card(cards[0])
 
-        # Get first card
-        first_card = create_learning_card(due_cards[0])
+        # 5. Initialize session state
+        session_state = {
+            "session_id": session_id,
+            "learner_id": request.learner_id,
+            "learner_profile_id": learner_profile_id,
+            "cards": cards,
+            "current_index": 0,
+            "cards_reviewed": 0,
+            "cards_correct": 0,
+            "total_xp_earned": 0,
+            "current_streak": profile["streakDays"],
+            "zpd_zone": "optimal",
+            "scaffolding_active": [],
+            "started_at": datetime.now(),
+            "achievements_unlocked": [],
+            "recent_ratings": []  # Track last 10 ratings for ZPD
+        }
 
-        # Create session state
-        session_state = SessionState(
+        # Store session
+        sessions[session_id] = session_state
+
+        return SessionState(
             session_id=session_id,
             learner_id=request.learner_id,
             current_card=first_card,
             cards_reviewed=0,
             cards_correct=0,
             total_xp_earned=0,
-            current_streak=profile["streak_days"],
+            current_streak=profile["streakDays"],
             zpd_zone="optimal",
             scaffolding_active=[],
-            started_at=datetime.now(),
+            started_at=session_state["started_at"],
             achievements_unlocked=[]
         )
-
-        # Store session
-        sessions[session_id] = session_state
-
-        return session_state
 
     except HTTPException:
         raise
     except Exception as e:
+        print(f"Error starting session: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=500,
-            detail=f"Error starting session: {str(e)}"
+            detail=f"Failed to start session: {str(e)}"
         )
 
 
 @app.post("/session/answer", response_model=AnswerResponse)
 async def process_answer(request: AnswerRequest):
     """
-    Process a learner's answer
+    Process learner's answer and return next card
 
-    Flow:
-    1. Update Scheduler (FSRS)
-    2. Update Inference (ZPD)
-    3. Send to Telemetry
-    4. Calculate XP
-    5. Check achievements
-    6. Get next card
-    7. Apply scaffolding if needed
+    1. Get session state
+    2. Calculate XP
+    3. Update FSRS schedule
+    4. Assess ZPD state
+    5. Update database (XP, evidence, competency)
+    6. Check achievements
+    7. Get next card
+    8. Return response
     """
     try:
-        # Get session
-        if request.session_id not in sessions:
+        # 1. Get session
+        session = sessions.get(request.session_id)
+        if not session:
             raise HTTPException(status_code=404, detail="Session not found")
 
-        session = sessions[request.session_id]
+        # Get current card
+        current_card = session["cards"][session["current_index"]]
+        learner_profile_id = session["learner_profile_id"]
 
-        # Get learner profile
-        profile = get_learner_profile(session.learner_id)
-
-        # Determine if answer is correct (simplified for demo)
-        is_correct = request.rating in [Rating.GOOD, Rating.EASY]
-
-        # Update session stats
-        session.cards_reviewed += 1
-        if is_correct:
-            session.cards_correct += 1
-
-        # Calculate XP
-        current_card = session.current_card
+        # 2. Calculate XP
         xp_earned = gamification.calculate_xp(
-            current_card.difficulty if current_card else 5.0,
+            current_card["difficulty"],
             request.rating,
-            profile["streak_days"]
+            session["current_streak"]
         )
 
-        session.total_xp_earned += xp_earned
-        profile["total_xp"] += xp_earned
+        # 3. Update FSRS schedule
+        schedule_info = await update_fsrs_schedule(
+            learner_profile_id,
+            current_card["card_id"],
+            request.rating
+        )
+
+        # Update scheduled item in database
+        if "next_due_date" in schedule_info:
+            next_due = datetime.fromisoformat(schedule_info["next_due_date"].replace('Z', '+00:00'))
+            db.update_scheduled_item(
+                learner_profile_id,
+                current_card["card_id"],
+                schedule_info.get("new_stability", 2.5),
+                schedule_info.get("new_difficulty", 5.0),
+                0.9,  # retrievability
+                schedule_info.get("interval_days", 1),
+                next_due
+            )
+
+        # 4. Track rating for ZPD
+        session["recent_ratings"].append(request.rating.value)
+        session["recent_ratings"] = session["recent_ratings"][-10:]  # Keep last 10
+
+        # Assess ZPD state
+        zpd_state = await assess_zpd_state(
+            session["learner_id"],
+            current_card["conceptId"],
+            session["recent_ratings"],
+            current_card["difficulty"]
+        )
+
+        # 5. Update database
+        # Update XP
+        xp_result = db.update_learner_xp(session["learner_id"], xp_earned)
+        new_total_xp = xp_result["totalXP"]
 
         # Calculate level
-        level, level_progress = gamification.get_level(profile["total_xp"])
-        old_level = profile["level"]
-        profile["level"] = level
+        level, level_progress = gamification.get_level(new_total_xp)
 
-        # Check for achievements
-        achievement = gamification.check_achievements(
-            profile,
-            xp_earned,
-            profile["streak_days"],
-            profile["concepts_mastered"]
+        # Update level if changed
+        if level > xp_result["level"]:
+            db.update_learner_level(session["learner_id"], level)
+
+        # Store evidence
+        db.create_evidence(
+            learner_profile_id,
+            current_card["card_id"],
+            "PERFORMANCE",
+            {
+                "rating": request.rating.value,
+                "dwell_time_ms": request.dwell_time_ms,
+                "hesitation_count": request.hesitation_count,
+                "timestamp": datetime.utcnow().isoformat()
+            }
         )
 
-        if achievement:
-            session.achievements_unlocked.append(achievement["name"])
+        # Update competency state (simple: based on rating)
+        knowledge_prob = {
+            Rating.AGAIN: 0.3,
+            Rating.HARD: 0.6,
+            Rating.GOOD: 0.8,
+            Rating.EASY: 0.95
+        }[request.rating]
 
-        # Calculate success rate for ZPD
-        success_rate = session.cards_correct / session.cards_reviewed if session.cards_reviewed > 0 else 0.5
+        db.update_competency_state(
+            learner_profile_id,
+            current_card["conceptId"],
+            knowledge_prob,
+            knowledge_prob  # mastery = knowledge for now
+        )
 
-        # Determine ZPD zone
-        if success_rate < 0.35:
-            zpd_zone = "frustration"
-            zpd_message = "You're struggling with this topic. Let's add some help!"
-            scaffolding = {
-                "type": "worked_example",
-                "content": "Here's a complete example to help you understand...",
-                "show": True
-            }
-        elif success_rate > 0.70:
-            zpd_zone = "comfort"
-            zpd_message = "You're doing great! Let's increase the challenge."
-            scaffolding = None
-        else:
-            zpd_zone = "optimal"
-            zpd_message = "Perfect! You're in the optimal learning zone."
-            scaffolding = None
+        # 6. Check achievements
+        achievement = gamification.check_achievements(
+            new_total_xp,
+            xp_earned,
+            session["current_streak"],
+            0  # TODO: count mastered concepts
+        )
 
-        session.zpd_zone = zpd_zone
+        # 7. Update session state
+        session["cards_reviewed"] += 1
+        if request.rating in [Rating.GOOD, Rating.EASY]:
+            session["cards_correct"] += 1
+        session["total_xp_earned"] += xp_earned
+        session["zpd_zone"] = zpd_state["zone"]
+        session["current_index"] += 1
 
-        # Get next card (for demo, cycle through available cards)
-        # TODO: Get from scheduler based on ZPD state
-        due_cards = await get_due_cards(session.learner_id)
+        # 8. Get next card
         next_card = None
-        if session.cards_reviewed < len(due_cards):
-            next_card_data = due_cards[session.cards_reviewed]
-            next_card = create_learning_card(next_card_data)
-            session.current_card = next_card
+        if session["current_index"] < len(session["cards"]):
+            next_card_data = session["cards"][session["current_index"]]
+            next_card = convert_db_card_to_learning_card(next_card_data)
 
-        # Prepare response
-        response = AnswerResponse(
-            correct=is_correct,
+        return AnswerResponse(
+            correct=request.rating in [Rating.GOOD, Rating.EASY],
             xp_earned=xp_earned,
-            new_total_xp=profile["total_xp"],
+            new_total_xp=new_total_xp,
             level=level,
             level_progress=level_progress,
             next_card=next_card,
-            zpd_zone=zpd_zone,
-            zpd_message=zpd_message,
-            scaffolding=scaffolding,
+            zpd_zone=zpd_state["zone"],
+            zpd_message=zpd_state["message"],
+            scaffolding=zpd_state.get("scaffolding"),
             achievement_unlocked=achievement
         )
-
-        return response
 
     except HTTPException:
         raise
     except Exception as e:
+        print(f"Error processing answer: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=500,
-            detail=f"Error processing answer: {str(e)}"
+            detail=f"Failed to process answer: {str(e)}"
         )
 
 
-@app.get("/session/{session_id}", response_model=SessionState)
+@app.get("/session/{session_id}")
 async def get_session(session_id: str):
     """Get current session state"""
-    if session_id not in sessions:
+    session = sessions.get(session_id)
+    if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    return sessions[session_id]
+    return {
+        "session_id": session_id,
+        "cards_reviewed": session["cards_reviewed"],
+        "cards_correct": session["cards_correct"],
+        "total_xp_earned": session["total_xp_earned"],
+        "zpd_zone": session["zpd_zone"]
+    }
 
 
 @app.get("/profile/{learner_id}")
 async def get_profile(learner_id: str):
-    """Get learner profile"""
-    profile = get_learner_profile(learner_id)
+    """Get learner profile from database"""
+    profile = db.load_learner_profile(learner_id)
 
-    level, level_progress = gamification.get_level(profile["total_xp"])
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+
+    level, progress = gamification.get_level(profile["totalXP"])
 
     return {
-        **profile,
+        "learner_id": learner_id,
+        "total_xp": profile["totalXP"],
         "level": level,
-        "level_progress": level_progress,
-        "xp_to_next_level": gamification.xp_for_level(level + 1) - profile["total_xp"]
+        "level_progress": progress,
+        "streak_days": profile["streakDays"],
+        "fsrs_stability": profile["fsrsStability"],
+        "fsrs_difficulty": profile["fsrsDifficulty"]
     }
 
 
 @app.post("/session/{session_id}/end")
 async def end_session(session_id: str):
-    """End a learning session"""
-    if session_id not in sessions:
+    """End a learning session and return summary"""
+    session = sessions.get(session_id)
+    if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    session = sessions[session_id]
-
-    # Calculate session summary
     summary = {
         "session_id": session_id,
-        "cards_reviewed": session.cards_reviewed,
-        "cards_correct": session.cards_correct,
-        "success_rate": session.cards_correct / session.cards_reviewed if session.cards_reviewed > 0 else 0,
-        "xp_earned": session.total_xp_earned,
-        "achievements_unlocked": session.achievements_unlocked,
-        "duration_minutes": (datetime.now() - session.started_at).total_seconds() / 60
+        "duration_minutes": (datetime.now() - session["started_at"]).seconds / 60,
+        "cards_reviewed": session["cards_reviewed"],
+        "cards_correct": session["cards_correct"],
+        "success_rate": session["cards_correct"] / session["cards_reviewed"] if session["cards_reviewed"] > 0 else 0,
+        "total_xp_earned": session["total_xp_earned"],
+        "achievements_unlocked": session["achievements_unlocked"]
     }
 
-    # Clean up session
+    # Remove session from memory
     del sessions[session_id]
 
     return summary
@@ -541,14 +741,18 @@ async def end_session(session_id: str):
 
 @app.on_event("startup")
 async def startup_event():
-    print("✅ Orchestrator service started")
+    print("✅ Orchestrator service started (INTEGRATED VERSION)")
+    print("🔗 Database connection: active")
+    print(f"🔗 Scheduler URL: {SCHEDULER_URL}")
+    print(f"🔗 Inference URL: {INFERENCE_URL}")
     print("🎮 Learning session coordination active")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    await http_client.aclose()
-    print("🛑 Orchestrator service stopped")
+    print("🛑 Shutting down Orchestrator...")
+    db.close()
+    print("✅ Database connections closed")
 
 
 if __name__ == "__main__":
