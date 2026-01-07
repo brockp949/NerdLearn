@@ -1,12 +1,14 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
 import { useAuth } from '@/lib/auth-context'
 import { ContentViewer } from '@/components/learning/ContentViewer'
 import { QuestionCard, LearningCard, Rating } from '@/components/learning/QuestionCard'
 import { ScaffoldingPanel } from '@/components/learning/ScaffoldingPanel'
 import { LearningStats } from '@/components/learning/LearningStats'
+import { EngagementMeter } from '@/components/learning/EngagementMeter'
+import { TelemetryClient, EngagementScore } from '@/lib/telemetry'
 import Link from 'next/link'
 
 interface SessionState {
@@ -47,6 +49,12 @@ export default function LearnPage() {
   const [lastResponse, setLastResponse] = useState<AnswerResponse | null>(null)
   const [dwellStartTime, setDwellStartTime] = useState<number>(0)
 
+  // Telemetry state
+  const [telemetryClient, setTelemetryClient] = useState<TelemetryClient | null>(null)
+  const [engagement, setEngagement] = useState<EngagementScore | null>(null)
+  const [telemetryConnected, setTelemetryConnected] = useState(false)
+  const [hesitationCount, setHesitationCount] = useState(0)
+
   const API_URL = 'http://localhost:8005'
 
   const startSession = async () => {
@@ -74,6 +82,20 @@ export default function LearnPage() {
       setSession(data)
       setViewMode('content')
       setDwellStartTime(Date.now())
+
+      // Initialize telemetry
+      const client = new TelemetryClient({
+        sessionId: data.session_id,
+        learnerId: user?.id || 'demo_user',
+        telemetryUrl: process.env.NEXT_PUBLIC_TELEMETRY_URL || 'ws://localhost:8002/ws',
+        throttleMs: 50
+      })
+
+      client.onEngagement(setEngagement)
+      client.onConnection(setTelemetryConnected)
+      client.connect()
+
+      setTelemetryClient(client)
     } catch (err: any) {
       setError(err.message || 'Failed to start learning session')
     } finally {
@@ -81,9 +103,40 @@ export default function LearnPage() {
     }
   }
 
+  // Cleanup telemetry on unmount
+  useEffect(() => {
+    return () => {
+      if (telemetryClient) {
+        telemetryClient.disconnect()
+      }
+    }
+  }, [telemetryClient])
+
+  // Mouse tracking
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (telemetryClient && telemetryClient.isConnected()) {
+      telemetryClient.trackMouseMove({ clientX: e.clientX, clientY: e.clientY })
+    }
+  }, [telemetryClient])
+
+  useEffect(() => {
+    if (viewMode !== 'idle' && viewMode !== 'completed') {
+      window.addEventListener('mousemove', handleMouseMove as any)
+      return () => window.removeEventListener('mousemove', handleMouseMove as any)
+    }
+  }, [viewMode, handleMouseMove])
+
   const handleContentContinue = () => {
+    // Track content dwell time
+    const dwellTime = Date.now() - dwellStartTime
+    if (telemetryClient && session?.current_card) {
+      telemetryClient.trackDwellTime(session.current_card.card_id, dwellTime)
+      telemetryClient.trackInteraction(session.current_card.card_id, 'content_read', { dwell_time_ms: dwellTime })
+    }
+
     setViewMode('question')
     setDwellStartTime(Date.now())
+    setHesitationCount(0) // Reset hesitation counter
   }
 
   const handleAnswer = async (rating: Rating) => {
@@ -91,6 +144,19 @@ export default function LearnPage() {
 
     setLoading(true)
     const dwellTime = Date.now() - dwellStartTime
+
+    // Track interaction
+    if (telemetryClient) {
+      telemetryClient.trackInteraction(session.current_card.card_id, 'answer_submitted', {
+        rating,
+        dwell_time_ms: dwellTime,
+        hesitation_count: hesitationCount
+      })
+
+      if (hesitationCount > 0) {
+        telemetryClient.trackHesitation(session.current_card.card_id, hesitationCount)
+      }
+    }
 
     try {
       const response = await fetch(`${API_URL}/session/answer`, {
@@ -103,7 +169,7 @@ export default function LearnPage() {
           card_id: session.current_card.card_id,
           rating: rating,
           dwell_time_ms: dwellTime,
-          hesitation_count: 0
+          hesitation_count: hesitationCount
         })
       })
 
@@ -293,6 +359,14 @@ export default function LearnPage() {
 
             {/* Sidebar - Session Stats */}
             <div className="space-y-6">
+              {/* Engagement Meter */}
+              {session && viewMode !== 'idle' && viewMode !== 'completed' && (
+                <EngagementMeter
+                  engagement={engagement}
+                  connected={telemetryConnected}
+                />
+              )}
+
               {/* Session Progress */}
               {session && viewMode !== 'idle' && (
                 <div className="bg-white rounded-lg shadow-md p-6">
