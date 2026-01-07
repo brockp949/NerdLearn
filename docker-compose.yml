@@ -1,0 +1,178 @@
+version: '3.8'
+
+services:
+  # PostgreSQL - Relational DB for user profiles, auth, transactions
+  postgres:
+    image: postgres:15-alpine
+    container_name: nerdlearn-postgres
+    environment:
+      POSTGRES_DB: nerdlearn
+      POSTGRES_USER: nerdlearn
+      POSTGRES_PASSWORD: nerdlearn_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nerdlearn"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Neo4j - Graph DB for Knowledge Graph
+  neo4j:
+    image: neo4j:5.13-community
+    container_name: nerdlearn-neo4j
+    environment:
+      NEO4J_AUTH: neo4j/nerdlearn_dev_password
+      NEO4J_PLUGINS: '["apoc", "graph-data-science"]'
+      NEO4J_dbms_security_procedures_unrestricted: apoc.*,gds.*
+      NEO4J_dbms_memory_heap_max__size: 2G
+    ports:
+      - "7474:7474"  # HTTP
+      - "7687:7687"  # Bolt
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p nerdlearn_dev_password 'RETURN 1'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # TimescaleDB - Time-series DB for behavioral logs
+  timescaledb:
+    image: timescale/timescaledb:latest-pg15
+    container_name: nerdlearn-timescale
+    environment:
+      POSTGRES_DB: telemetry
+      POSTGRES_USER: nerdlearn
+      POSTGRES_PASSWORD: nerdlearn_dev_password
+    ports:
+      - "5433:5432"
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nerdlearn"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis - Caching and session management
+  redis:
+    image: redis:7-alpine
+    container_name: nerdlearn-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Redpanda - Kafka-compatible event streaming (lighter than Kafka)
+  redpanda:
+    image: docker.redpanda.com/vectorized/redpanda:v23.2.11
+    container_name: nerdlearn-redpanda
+    command:
+      - redpanda
+      - start
+      - --smp
+      - '1'
+      - --reserve-memory
+      - 0M
+      - --overprovisioned
+      - --node-id
+      - '0'
+      - --kafka-addr
+      - PLAINTEXT://0.0.0.0:29092,OUTSIDE://0.0.0.0:9092
+      - --advertise-kafka-addr
+      - PLAINTEXT://redpanda:29092,OUTSIDE://localhost:9092
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+      - "9644:9644"
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep 'Healthy:.*true' || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
+  # Milvus Standalone - Vector DB for semantic search
+  milvus-etcd:
+    image: quay.io/coreos/etcd:v3.5.5
+    container_name: milvus-etcd
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+      - ETCD_SNAPSHOT_COUNT=50000
+    volumes:
+      - milvus_etcd:/etcd
+    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+
+  milvus-minio:
+    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
+    container_name: milvus-minio
+    environment:
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+    volumes:
+      - milvus_minio:/minio_data
+    command: minio server /minio_data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  milvus-standalone:
+    image: milvusdb/milvus:v2.3.3
+    container_name: milvus-standalone
+    depends_on:
+      - milvus-etcd
+      - milvus-minio
+    environment:
+      ETCD_ENDPOINTS: milvus-etcd:2379
+      MINIO_ADDRESS: milvus-minio:9000
+    volumes:
+      - milvus_data:/var/lib/milvus
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    command: ["milvus", "run", "standalone"]
+
+  # FastAPI Services will be added here as they are developed
+  # api-gateway:
+  #   build:
+  #     context: ./apps/api
+  #     dockerfile: Dockerfile
+  #   container_name: nerdlearn-api-gateway
+  #   depends_on:
+  #     - postgres
+  #     - redis
+  #   ports:
+  #     - "8000:8000"
+  #   environment:
+  #     DATABASE_URL: postgresql://nerdlearn:nerdlearn_dev_password@postgres:5432/nerdlearn
+  #     REDIS_URL: redis://redis:6379
+
+volumes:
+  postgres_data:
+  neo4j_data:
+  neo4j_logs:
+  timescale_data:
+  redis_data:
+  redpanda_data:
+  milvus_etcd:
+  milvus_minio:
+  milvus_data:
+
+networks:
+  default:
+    name: nerdlearn-network

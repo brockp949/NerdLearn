@@ -1,0 +1,29 @@
+{
+  "name": "nerdlearn",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NerdLearn: Cognitive-Adaptive Learning Platform",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "services/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "clean": "turbo run clean && rm -rf node_modules",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "db:migrate": "cd packages/db && npm run migrate",
+    "db:seed": "cd packages/db && npm run seed"
+  },
+  "devDependencies": {
+    "turbo": "^1.11.2"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}
