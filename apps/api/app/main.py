@@ -1,0 +1,43 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from app.core.config import settings
+from app.routers import courses, modules, assessment, reviews, chat
+
+app = FastAPI(
+    title="NerdLearn API",
+    description="AI-Powered Adaptive Learning Platform API",
+    version="0.1.0",
+)
+
+# CORS configuration
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Include routers
+app.include_router(courses.router, prefix="/api/courses", tags=["courses"])
+app.include_router(modules.router, prefix="/api/modules", tags=["modules"])
+app.include_router(assessment.router, prefix="/api/assessment", tags=["assessment"])
+app.include_router(reviews.router, prefix="/api/reviews", tags=["reviews"])
+app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
+
+
+@app.get("/")
+async def root():
+    return JSONResponse(
+        content={
+            "message": "NerdLearn API",
+            "version": "0.1.0",
+            "docs": "/docs",
+        }
+    )
+
+
+@app.get("/health")
+async def health_check():
+    return JSONResponse(content={"status": "healthy"})
