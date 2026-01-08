@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.core.config import settings
-from app.routers import courses, modules, assessment, reviews, chat, processing, adaptive, gamification
+from app.routers import courses, modules, assessment, reviews, chat, processing, adaptive, gamification, graph
 
 app = FastAPI(
     title="NerdLearn API",
@@ -28,6 +28,7 @@ app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
 app.include_router(processing.router, prefix="/api/processing", tags=["processing"])
 app.include_router(adaptive.router, prefix="/api/adaptive", tags=["adaptive"])
 app.include_router(gamification.router, prefix="/api/gamification", tags=["gamification"])
+app.include_router(graph.router, prefix="/api/graph", tags=["graph"])
 
 
 @app.get("/")
