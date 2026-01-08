@@ -27,6 +27,8 @@ class User(Base):
     enrollments = relationship("Enrollment", back_populates="user")
     mastery_records = relationship("UserConceptMastery", back_populates="user")
     spaced_repetition_cards = relationship("SpacedRepetitionCard", back_populates="user")
+    achievements = relationship("UserAchievement", back_populates="user")
+    stats = relationship("UserStats", back_populates="user", uselist=False)
 
 
 class Instructor(Base):
