@@ -1,0 +1,200 @@
+version: '3.8'
+
+services:
+  # PostgreSQL - Production
+  postgres:
+    image: postgres:16-alpine
+    container_name: nerdlearn-postgres-prod
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-nerdlearn}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}  # Set in .env.prod
+      POSTGRES_DB: ${POSTGRES_DB:-nerdlearn}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_prod_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nerdlearn}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Neo4j - Production
+  neo4j:
+    image: neo4j:5.15-enterprise
+    container_name: nerdlearn-neo4j-prod
+    environment:
+      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD}
+      NEO4J_ACCEPT_LICENSE_AGREEMENT: "yes"
+      NEO4J_PLUGINS: '["apoc", "graph-data-science"]'
+      NEO4J_dbms_memory_heap_max__size: 4G
+      NEO4J_dbms_memory_pagecache_size: 2G
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - neo4j_prod_data:/data
+      - neo4j_prod_logs:/logs
+    restart: unless-stopped
+
+  # Qdrant - Production
+  qdrant:
+    image: qdrant/qdrant:v1.7.4
+    container_name: nerdlearn-qdrant-prod
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_prod_data:/qdrant/storage
+    restart: unless-stopped
+
+  # Redis - Production
+  redis:
+    image: redis:7-alpine
+    container_name: nerdlearn-redis-prod
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_prod_data:/data
+    restart: unless-stopped
+
+  # MinIO - Production
+  minio:
+    image: minio/minio:latest
+    container_name: nerdlearn-minio-prod
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_prod_data:/data
+    command: server /data --console-address ":9001"
+    restart: unless-stopped
+
+  # FastAPI - Production
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile.prod
+    container_name: nerdlearn-api-prod
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-nerdlearn}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-nerdlearn}
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: ${NEO4J_USER:-neo4j}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6333
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      SECRET_KEY: ${SECRET_KEY}
+      ENVIRONMENT: production
+      DEBUG: "false"
+      SENTRY_DSN: ${SENTRY_DSN:-}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      neo4j:
+        condition: service_started
+      redis:
+        condition: service_started
+      qdrant:
+        condition: service_started
+      minio:
+        condition: service_started
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          memory: 1G
+
+  # Celery Worker - Production
+  worker:
+    build:
+      context: ./apps/worker
+      dockerfile: Dockerfile
+    container_name: nerdlearn-worker-prod
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-nerdlearn}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-nerdlearn}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: ${NEO4J_USER:-neo4j}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD}
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6333
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+    depends_on:
+      - postgres
+      - redis
+      - neo4j
+      - qdrant
+      - minio
+    restart: unless-stopped
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+
+  # Next.js - Production
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile.prod
+      args:
+        NEXT_PUBLIC_API_URL: https://api.nerdlearn.app
+    container_name: nerdlearn-web-prod
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+
+  # Nginx - Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: nerdlearn-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_cache:/var/cache/nginx
+    depends_on:
+      - api
+      - web
+    restart: unless-stopped
+
+volumes:
+  postgres_prod_data:
+  neo4j_prod_data:
+  neo4j_prod_logs:
+  qdrant_prod_data:
+  redis_prod_data:
+  minio_prod_data:
+  nginx_cache:
+
+networks:
+  default:
+    name: nerdlearn-prod-network

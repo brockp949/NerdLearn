@@ -1,14 +1,57 @@
-from fastapi import FastAPI
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
+from loguru import logger
+
 from app.core.config import settings
+from app.core.logging import setup_logging
+from app.core.middleware import RateLimitMiddleware, LoggingMiddleware, SecurityHeadersMiddleware
+from app.core.database import get_db
 from app.routers import courses, modules, assessment, reviews, chat, processing, adaptive, gamification
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan event handler for startup and shutdown"""
+    # Startup
+    setup_logging()
+    logger.info("🚀 Starting NerdLearn API")
+    logger.info(f"Environment: {settings.ENVIRONMENT}")
+    logger.info(f"Debug mode: {settings.DEBUG}")
+
+    # Initialize Sentry if configured
+    if settings.SENTRY_DSN:
+        try:
+            import sentry_sdk
+            sentry_sdk.init(
+                dsn=settings.SENTRY_DSN,
+                environment=settings.ENVIRONMENT,
+                traces_sample_rate=0.1 if settings.ENVIRONMENT == "production" else 1.0,
+            )
+            logger.info("Sentry monitoring initialized")
+        except Exception as e:
+            logger.warning(f"Failed to initialize Sentry: {e}")
+
+    yield
+
+    # Shutdown
+    logger.info("Shutting down NerdLearn API")
+
 
 app = FastAPI(
     title="NerdLearn API",
     description="AI-Powered Adaptive Learning Platform API",
-    version="0.1.0",
+    version="1.0.0",
+    lifespan=lifespan,
 )
+
+# Add custom middleware (order matters - last added is executed first)
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(LoggingMiddleware)
+app.add_middleware(RateLimitMiddleware, redis_url=settings.REDIS_URL)
 
 # CORS configuration
 app.add_middleware(
@@ -42,5 +85,39 @@ async def root():
 
 
 @app.get("/health")
-async def health_check():
-    return JSONResponse(content={"status": "healthy"})
+async def health_check(db: AsyncSession = Depends(get_db)):
+    """
+    Health check endpoint with database connectivity verification
+    """
+    health_status = {
+        "status": "healthy",
+        "environment": settings.ENVIRONMENT,
+        "version": "1.0.0",
+        "services": {}
+    }
+
+    # Check database connectivity
+    try:
+        result = await db.execute(text("SELECT 1"))
+        result.scalar()
+        health_status["services"]["database"] = "healthy"
+    except Exception as e:
+        logger.error(f"Database health check failed: {e}")
+        health_status["status"] = "degraded"
+        health_status["services"]["database"] = "unhealthy"
+
+    # Check Redis connectivity (for rate limiting)
+    if settings.RATE_LIMIT_ENABLED:
+        try:
+            import redis.asyncio as redis
+            redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True)
+            await redis_client.ping()
+            await redis_client.close()
+            health_status["services"]["redis"] = "healthy"
+        except Exception as e:
+            logger.error(f"Redis health check failed: {e}")
+            health_status["status"] = "degraded"
+            health_status["services"]["redis"] = "unhealthy"
+
+    status_code = 200 if health_status["status"] == "healthy" else 503
+    return JSONResponse(content=health_status, status_code=status_code)
