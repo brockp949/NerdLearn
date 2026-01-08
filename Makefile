@@ -1,4 +1,4 @@
-.PHONY: help install dev build clean docker-up docker-down docker-logs
+.PHONY: help install dev build clean docker-up docker-down docker-logs worker-dev worker-logs
 
 help:
 	@echo "NerdLearn - AI-Powered Adaptive Learning Platform"
@@ -10,12 +10,15 @@ help:
 	@echo "  make docker-up    - Start all Docker services"
 	@echo "  make docker-down  - Stop all Docker services"
 	@echo "  make docker-logs  - View Docker logs"
+	@echo "  make worker-dev   - Start Celery worker locally"
+	@echo "  make worker-logs  - View worker logs"
 	@echo "  make clean        - Clean build artifacts"
 
 install:
 	@echo "Installing dependencies..."
 	npm install
 	cd apps/api && python -m venv venv && . venv/bin/activate && pip install -r requirements.txt
+	cd apps/worker && pip install -r requirements.txt
 
 dev:
 	@echo "Starting development servers..."
@@ -36,6 +39,14 @@ docker-down:
 docker-logs:
 	@echo "Viewing Docker logs..."
 	docker-compose logs -f
+
+worker-dev:
+	@echo "Starting Celery worker..."
+	cd apps/worker && celery -A app.celery_app worker --loglevel=info --concurrency=2
+
+worker-logs:
+	@echo "Viewing worker logs..."
+	docker-compose logs -f worker
 
 clean:
 	@echo "Cleaning build artifacts..."

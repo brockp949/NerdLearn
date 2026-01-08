@@ -18,6 +18,13 @@ class ModuleType(enum.Enum):
     INTERACTIVE = "interactive"
 
 
+class ProcessingStatus(enum.Enum):
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
 class Course(Base):
     __tablename__ = "courses"
 
@@ -58,7 +65,17 @@ class Module(Base):
 
     # Processing status
     is_processed = Column(Boolean, default=False)
+    processing_status = Column(Enum(ProcessingStatus), default=ProcessingStatus.PENDING)
+    processing_task_id = Column(String)  # Celery task ID
+    processing_error = Column(Text)  # Error message if failed
+    processing_progress = Column(String)  # JSON with processing details
+
+    # Processed content
     transcript_url = Column(String)  # For videos
+    transcript_text = Column(Text)  # Full transcript
+    chunk_count = Column(Integer, default=0)  # Number of chunks in vector DB
+    concept_count = Column(Integer, default=0)  # Number of extracted concepts
+    processed_at = Column(DateTime(timezone=True))  # When processing completed
 
     # Metadata
     created_at = Column(DateTime(timezone=True), server_default=func.now())

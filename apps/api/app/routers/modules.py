@@ -3,9 +3,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List
 from app.core.database import get_db
-from app.models.course import Module, Course, ModuleType
+from app.models.course import Module, Course, ModuleType, ProcessingStatus
 from app.schemas.course import ModuleCreate, ModuleResponse, ModuleUpdate
 from app.services.storage import storage_service
+from app.services.worker_client import trigger_module_processing
 import os
 
 router = APIRouter()
@@ -69,7 +70,24 @@ async def create_module(
     await db.flush()
     await db.refresh(db_module)
 
-    # TODO: Trigger background processing task for video transcription/PDF parsing
+    # Trigger background processing task
+    try:
+        task_id = trigger_module_processing(
+            module_id=db_module.id,
+            course_id=course_id,
+            module_type=module_type,
+            file_url=file_url,
+            title=title
+        )
+        db_module.processing_task_id = task_id
+        db_module.processing_status = ProcessingStatus.PROCESSING
+        await db.commit()
+    except Exception as e:
+        # Log error but don't fail the request
+        print(f"Failed to trigger processing task: {str(e)}")
+        db_module.processing_status = ProcessingStatus.FAILED
+        db_module.processing_error = str(e)
+        await db.commit()
 
     return db_module
 

@@ -148,14 +148,27 @@ npm run dev
 - ✅ Drag-and-drop file upload (videos/PDFs)
 - ✅ Course management interface
 
-### 🚧 Phase 2: NotebookLM Ingestion Pipeline (PENDING)
+### ✅ Phase 2: NotebookLM Ingestion Pipeline (COMPLETE)
 
-- [ ] Celery/ARQ background worker
-- [ ] PDF processor with LayoutLMv3
-- [ ] Video transcription with Whisper
-- [ ] Semantic chunking & vector storage
-- [ ] Knowledge graph construction (Neo4j)
-- [ ] Audio overview generator
+**Phase 2.1: Background Worker Infrastructure**
+- ✅ Celery worker with Redis broker
+- ✅ Task queues (documents, videos, processing)
+- ✅ Docker integration with worker service
+- ✅ Processing status tracking in database
+
+**Phase 2.2: Content Processing**
+- ✅ PDF processor with pdfplumber/PyPDF2
+- ✅ Video transcription with OpenAI Whisper
+- ✅ Semantic chunking with transformer tokenizers
+- ✅ Vector storage with Qdrant embeddings
+- ✅ Knowledge graph construction (Neo4j)
+- ✅ Concept extraction and relationship detection
+
+**Phase 2.3: Integration**
+- ✅ API integration for triggering background tasks
+- ✅ Processing status check endpoints
+- ✅ Module metadata tracking (chunk count, concept count)
+- ✅ Automatic processing on module upload
 
 ### 🚧 Phase 3: Adaptive Engine (PENDING)
 
