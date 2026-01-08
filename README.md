@@ -170,14 +170,32 @@ npm run dev
 - ✅ Module metadata tracking (chunk count, concept count)
 - ✅ Automatic processing on module upload
 
-### 🚧 Phase 3: Adaptive Engine (PENDING)
+### ✅ Phase 3: Adaptive Engine (COMPLETE)
 
-- [ ] Stealth assessment websocket
-- [ ] Evidence collection rules
-- [ ] Bayesian mastery updates
-- [ ] DKT model (LSTM/Transformer)
-- [ ] ZPD regulator
-- [ ] FSRS spaced repetition
+**Phase 3.1: FSRS Spaced Repetition**
+- ✅ FSRS algorithm implementation with stability/difficulty tracking
+- ✅ Spaced repetition card models and review logging
+- ✅ Adaptive scheduling based on performance
+- ✅ Next interval predictions for all rating options
+
+**Phase 3.2: Stealth Assessment**
+- ✅ WebSocket telemetry collector for behavioral data
+- ✅ Evidence rules (dwell time, video engagement, chat queries)
+- ✅ Real-time mastery updates from implicit feedback
+- ✅ Multi-signal evidence aggregation
+
+**Phase 3.3: Bayesian Knowledge Tracing**
+- ✅ BKT probabilistic mastery estimation
+- ✅ Bayesian updates from observations and evidence
+- ✅ Performance prediction and mastery thresholds
+- ✅ Sessions-to-mastery estimation
+
+**Phase 3.4: Zone of Proximal Development**
+- ✅ ZPD-based content difficulty regulation
+- ✅ Prerequisite readiness checking
+- ✅ Optimal challenge point calculation
+- ✅ Content recommendations with success rate prediction
+- ✅ Dynamic difficulty adjustment
 
 ### 🚧 Phase 4: Learning Interface (PENDING)
 
