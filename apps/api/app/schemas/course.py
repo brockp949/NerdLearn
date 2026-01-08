@@ -17,6 +17,13 @@ class ModuleType(str, Enum):
     INTERACTIVE = "interactive"
 
 
+class ProcessingStatus(str, Enum):
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
 # Course Schemas
 class CourseBase(BaseModel):
     title: str
@@ -80,7 +87,13 @@ class ModuleResponse(ModuleBase):
     file_url: Optional[str] = None
     file_size: Optional[int] = None
     is_processed: bool = False
+    processing_status: Optional[ProcessingStatus] = ProcessingStatus.PENDING
+    processing_task_id: Optional[str] = None
+    processing_error: Optional[str] = None
     transcript_url: Optional[str] = None
+    chunk_count: Optional[int] = 0
+    concept_count: Optional[int] = 0
+    processed_at: Optional[datetime] = None
     created_at: datetime
 
     class Config:
