@@ -11,10 +11,19 @@ Implementation:
 - Track mastery across concepts
 - Recommend content in the "sweet spot" (slightly challenging)
 - Adjust difficulty dynamically based on performance
+
+Enhanced with response time analysis:
+- Fast correct → Automaticity, may need harder content
+- Slow correct → Optimal challenge
+- Fast wrong → Possible misconception
+- Slow wrong → Content too hard
 """
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Any, TYPE_CHECKING
 from dataclasses import dataclass
 import statistics
+
+if TYPE_CHECKING:
+    from .response_time_analyzer import ResponseTimeAnalyzer
 
 
 @dataclass
@@ -319,3 +328,159 @@ class ZPDRegulator:
             return True, f"Mastery low: {mastery:.1%}"
 
         return False, "Review not needed"
+
+    def calculate_enhanced_zpd_score(
+        self,
+        user_mastery: float,
+        content_difficulty: float,
+        prerequisites_met: bool,
+        time_analyzer: "ResponseTimeAnalyzer",
+        user_id: int,
+        concept_id: int,
+    ) -> Dict[str, Any]:
+        """
+        Calculate ZPD score enhanced with response time analysis
+
+        Combines traditional ZPD calculation with response time patterns
+        to provide more accurate difficulty recommendations.
+
+        Args:
+            user_mastery: User's current mastery level (0-1)
+            content_difficulty: Content difficulty (0-1 scale)
+            prerequisites_met: Whether prerequisites are satisfied
+            time_analyzer: ResponseTimeAnalyzer instance
+            user_id: User ID for time analysis
+            concept_id: Concept ID for time analysis
+
+        Returns:
+            Enhanced ZPD analysis with time-based insights
+        """
+        # Calculate base ZPD score
+        base_score, zone = self.calculate_zpd_score(
+            user_mastery, content_difficulty, prerequisites_met
+        )
+
+        # Get time-based enhancement
+        time_enhancement = time_analyzer.get_zpd_enhancement(
+            user_id, concept_id, base_score
+        )
+
+        # Get cognitive load estimate
+        cognitive_load = time_analyzer.estimate_cognitive_load(user_id, concept_id)
+
+        # Adjust recommendation based on cognitive state
+        final_recommendation = self._generate_enhanced_recommendation(
+            zone,
+            time_enhancement,
+            cognitive_load,
+        )
+
+        return {
+            "base_zpd_score": round(base_score, 4),
+            "enhanced_zpd_score": time_enhancement["enhanced_zpd_score"],
+            "zone": zone,
+            "time_adjustment": time_enhancement["adjustment"],
+            "time_patterns": time_enhancement.get("time_patterns", {}),
+            "cognitive_load": cognitive_load["cognitive_load"],
+            "cognitive_load_score": cognitive_load["load_score"],
+            "recommendation": final_recommendation,
+            "confidence": time_enhancement["confidence"],
+        }
+
+    def _generate_enhanced_recommendation(
+        self,
+        zone: str,
+        time_enhancement: Dict[str, Any],
+        cognitive_load: Dict[str, Any],
+    ) -> str:
+        """Generate comprehensive recommendation based on all factors"""
+        recommendations = []
+
+        # Zone-based recommendation
+        if "Boredom" in zone:
+            recommendations.append("Increase difficulty")
+        elif "Frustration" in zone:
+            recommendations.append("Decrease difficulty or provide scaffolding")
+        elif "Optimal" in zone:
+            recommendations.append("Current difficulty is appropriate")
+
+        # Time pattern-based
+        primary_pattern = time_enhancement.get("primary_pattern", "")
+        if primary_pattern == "fast_correct":
+            recommendations.append("Consider advancing to more challenging content")
+        elif primary_pattern == "slow_wrong":
+            recommendations.append("Review prerequisites and provide additional support")
+        elif primary_pattern == "fast_wrong":
+            recommendations.append("Check for misconceptions before proceeding")
+
+        # Cognitive load-based
+        load_level = cognitive_load.get("cognitive_load", "unknown")
+        if load_level == "overload":
+            recommendations.append("Reduce cognitive load - break content into smaller pieces")
+        elif load_level == "high":
+            recommendations.append("Consider providing more scaffolding")
+        elif load_level == "low":
+            recommendations.append("Can handle more complex content")
+
+        return " | ".join(recommendations) if recommendations else "Continue with current approach"
+
+    def recommend_with_timing(
+        self,
+        user_id: int,
+        user_concept_masteries: Dict[int, float],
+        available_modules: List[Dict],
+        concept_prerequisites: Dict[int, List[int]],
+        time_analyzer: "ResponseTimeAnalyzer",
+        top_n: int = 5,
+    ) -> List[Dict[str, Any]]:
+        """
+        Recommend content with response time analysis integration
+
+        Args:
+            user_id: User ID
+            user_concept_masteries: Dict[concept_id -> mastery_level]
+            available_modules: List of available modules
+            concept_prerequisites: Dict[concept_id -> List[prerequisite_ids]]
+            time_analyzer: ResponseTimeAnalyzer instance
+            top_n: Number of recommendations
+
+        Returns:
+            List of enhanced content recommendations
+        """
+        # Get base recommendations
+        base_recommendations = self.recommend_content(
+            user_concept_masteries,
+            available_modules,
+            concept_prerequisites,
+            top_n * 2,  # Get more to re-rank
+        )
+
+        enhanced = []
+        for rec in base_recommendations:
+            # Get time-based enhancement for primary concept
+            if rec.concept_ids:
+                primary_concept = rec.concept_ids[0]
+                enhancement = time_analyzer.get_zpd_enhancement(
+                    user_id, primary_concept, rec.zpd_score
+                )
+                cognitive_load = time_analyzer.estimate_cognitive_load(
+                    user_id, primary_concept
+                )
+
+                enhanced.append({
+                    "module_id": rec.module_id,
+                    "concept_ids": rec.concept_ids,
+                    "base_zpd_score": rec.zpd_score,
+                    "enhanced_zpd_score": enhancement["enhanced_zpd_score"],
+                    "difficulty": rec.difficulty,
+                    "estimated_success_rate": rec.estimated_success_rate,
+                    "time_patterns": enhancement.get("time_patterns", {}),
+                    "cognitive_load": cognitive_load["cognitive_load"],
+                    "rationale": rec.rationale,
+                    "time_recommendation": enhancement["recommendation"],
+                })
+
+        # Re-rank by enhanced ZPD score
+        enhanced.sort(key=lambda x: x["enhanced_zpd_score"], reverse=True)
+
+        return enhanced[:top_n]

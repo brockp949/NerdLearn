@@ -22,8 +22,21 @@ export const ragApi = {
 };
 
 export const graphApi = {
-    getGraph: async () => {
-        const response = await api.get('/graph/');
+    getGraph: async (courseId: number = 1) => {
+        const response = await api.get('/graph/', {
+            params: { course_id: courseId }
+        });
+        return response.data;
+    },
+    getCourseGraph: async (courseId: number) => {
+        const response = await api.get(`/graph/courses/${courseId}`);
+        return response.data;
+    },
+    getLearningPath: async (courseId: number, targetConcepts: string[], masteredConcepts?: string[]) => {
+        const response = await api.post(`/graph/courses/${courseId}/learning-path`, {
+            target_concepts: targetConcepts,
+            mastered_concepts: masteredConcepts || [],
+        });
         return response.data;
     },
 };

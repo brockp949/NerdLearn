@@ -1,12 +1,20 @@
 """
 Adaptive Learning API Endpoints
-Spaced repetition, content recommendations, and mastery tracking
+Spaced repetition, content recommendations, mastery tracking, cognitive load estimation,
+and interleaved practice scheduling
+
+Research alignment:
+- FSRS spaced repetition algorithm
+- Bayesian Knowledge Tracing
+- Zone of Proximal Development regulation
+- Cognitive Load Theory with expertise reversal effect
+- Interleaved Practice (g=0.42 effect size, hybrid scheduling)
 """
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from datetime import datetime, timedelta
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from app.core.database import get_db
 from app.models.spaced_repetition import SpacedRepetitionCard, ReviewLog, Concept
 from app.models.assessment import UserConceptMastery
@@ -14,7 +22,19 @@ from app.models.course import Course, Module
 from app.adaptive.fsrs import FSRSAlgorithm, FSRSCard, Rating
 from app.adaptive.bkt import BayesianKnowledgeTracer
 from app.adaptive.zpd import ZPDRegulator
-from pydantic import BaseModel
+from app.adaptive.cognitive_load import (
+    CognitiveLoadEstimator,
+    CognitiveLoadLevel,
+    ExpertiseLevel,
+    ResponseMetrics,
+)
+from app.adaptive.interleaved import (
+    InterleavedScheduler,
+    PracticeMode,
+    PracticeItem,
+    ConceptProficiency,
+)
+from pydantic import BaseModel, Field
 from enum import Enum
 
 router = APIRouter()
@@ -23,6 +43,8 @@ router = APIRouter()
 fsrs = FSRSAlgorithm()
 bkt = BayesianKnowledgeTracer()
 zpd = ZPDRegulator()
+cognitive_load_estimator = CognitiveLoadEstimator()
+interleaved_scheduler = InterleavedScheduler()
 
 
 class ReviewRating(str, Enum):
@@ -400,3 +422,625 @@ async def get_user_mastery(
         "avg_mastery": sum(c["mastery_level"] for c in concept_masteries) / len(concept_masteries) if concept_masteries else 0,
         "concepts": concept_masteries,
     }
+
+
+# ============== Cognitive Load Estimation ==============
+
+class ResponseMetricInput(BaseModel):
+    """Input model for a single response metric"""
+    response_time_ms: int = Field(..., gt=0, description="Response time in milliseconds")
+    correct: bool = Field(..., description="Whether response was correct")
+    confidence: Optional[float] = Field(default=None, ge=0, le=1, description="Self-reported confidence")
+    hint_used: bool = Field(default=False, description="Whether hints were used")
+    attempts: int = Field(default=1, ge=1, description="Number of attempts")
+    content_difficulty: float = Field(default=5.0, ge=1, le=10, description="Content difficulty 1-10")
+
+
+class CognitiveLoadRequest(BaseModel):
+    """Request model for cognitive load estimation"""
+    recent_metrics: List[ResponseMetricInput] = Field(..., min_length=1, description="Recent response metrics")
+    content_difficulty: float = Field(default=5.0, ge=1, le=10, description="Current content difficulty")
+
+
+class ExpertiseDetectionRequest(BaseModel):
+    """Request model for expertise detection"""
+    all_metrics: List[ResponseMetricInput] = Field(..., min_length=1, description="Performance history")
+    concept_id: Optional[int] = Field(default=None, description="Optional concept filter")
+
+
+class ScaffoldingRequest(BaseModel):
+    """Request model for scaffolding recommendation"""
+    expertise_level: str = Field(..., description="Detected expertise level")
+    cognitive_load_score: float = Field(..., ge=0, le=1, description="Cognitive load score")
+    cognitive_load_level: str = Field(..., description="Cognitive load level")
+    content_type: str = Field(default="problem", description="Content type: problem, reading, video")
+
+
+class InterventionCheckRequest(BaseModel):
+    """Request model for intervention check"""
+    cognitive_load_score: float = Field(..., ge=0, le=1, description="Current cognitive load score")
+    cognitive_load_level: str = Field(..., description="Current cognitive load level")
+    consecutive_errors: int = Field(default=0, ge=0, description="Consecutive wrong answers")
+    time_on_task_minutes: float = Field(default=0, ge=0, description="Time on current task")
+    expertise_level: str = Field(default="intermediate", description="User expertise level")
+
+
+@router.post("/cognitive-load/estimate")
+async def estimate_cognitive_load(request: CognitiveLoadRequest):
+    """
+    Estimate current cognitive load from recent behavioral metrics
+
+    Research basis: Cognitive Load Theory
+    - Response time patterns (primary indicator)
+    - Error rates and patterns
+    - Hint usage frequency
+    - Answer changes
+
+    Returns cognitive load level and breakdown into:
+    - Intrinsic load (content complexity)
+    - Extraneous load (interface/instruction issues)
+    - Germane load (active schema construction)
+    """
+    # Convert input to ResponseMetrics
+    metrics = [
+        ResponseMetrics(
+            response_time_ms=m.response_time_ms,
+            correct=m.correct,
+            confidence=m.confidence,
+            hint_used=m.hint_used,
+            attempts=m.attempts,
+            content_difficulty=m.content_difficulty,
+        )
+        for m in request.recent_metrics
+    ]
+
+    # Estimate cognitive load
+    estimate = cognitive_load_estimator.estimate_cognitive_load(
+        recent_metrics=metrics,
+        content_difficulty=request.content_difficulty,
+    )
+
+    return {
+        "level": estimate.level.value,
+        "score": round(estimate.score, 3),
+        "load_breakdown": {
+            "intrinsic": round(estimate.intrinsic_load, 3),
+            "extraneous": round(estimate.extraneous_load, 3),
+            "germane": round(estimate.germane_load, 3),
+        },
+        "confidence": round(estimate.confidence, 3),
+        "indicators": {k: round(v, 3) for k, v in estimate.indicators.items()},
+        "interpretation": _get_load_interpretation(estimate.level),
+    }
+
+
+@router.post("/cognitive-load/detect-expertise")
+async def detect_expertise_level(request: ExpertiseDetectionRequest):
+    """
+    Detect user's expertise level from performance history
+
+    Research basis: Expertise Reversal Effect (d=0.45-2.99)
+    - Scaffolding helps novices
+    - Scaffolding can hinder experts
+
+    Uses:
+    - Accuracy patterns
+    - Response time consistency
+    - Learning trajectory
+    """
+    # Convert input to ResponseMetrics
+    metrics = [
+        ResponseMetrics(
+            response_time_ms=m.response_time_ms,
+            correct=m.correct,
+            confidence=m.confidence,
+            hint_used=m.hint_used,
+            attempts=m.attempts,
+            content_difficulty=m.content_difficulty,
+        )
+        for m in request.all_metrics
+    ]
+
+    # Detect expertise
+    expertise_level, confidence = cognitive_load_estimator.detect_expertise(
+        all_metrics=metrics,
+        concept_id=request.concept_id,
+    )
+
+    return {
+        "expertise_level": expertise_level.value,
+        "confidence": round(confidence, 3),
+        "sample_size": len(metrics),
+        "description": _get_expertise_description(expertise_level),
+        "scaffolding_recommendation": _get_scaffolding_level(expertise_level),
+    }
+
+
+@router.post("/cognitive-load/scaffolding")
+async def get_scaffolding_recommendation(request: ScaffoldingRequest):
+    """
+    Get adaptive scaffolding recommendation
+
+    Research basis:
+    - Expertise reversal effect
+    - Backward fading strategy: remove scaffolds from end of problem first
+    - Adaptive fading based on expertise detection
+    """
+    # Convert string to enums
+    try:
+        expertise = ExpertiseLevel(request.expertise_level)
+    except ValueError:
+        expertise = ExpertiseLevel.INTERMEDIATE
+
+    try:
+        load_level = CognitiveLoadLevel(request.cognitive_load_level)
+    except ValueError:
+        load_level = CognitiveLoadLevel.OPTIMAL
+
+    # Create estimate object
+    from app.adaptive.cognitive_load import CognitiveLoadEstimate
+    estimate = CognitiveLoadEstimate(
+        level=load_level,
+        score=request.cognitive_load_score,
+        intrinsic_load=request.cognitive_load_score * 0.5,
+        extraneous_load=0.2,
+        germane_load=0.3,
+        confidence=0.8,
+        indicators={},
+    )
+
+    # Get recommendation
+    recommendation = cognitive_load_estimator.recommend_scaffolding(
+        expertise_level=expertise,
+        cognitive_load=estimate,
+        content_type=request.content_type,
+    )
+
+    return {
+        "expertise_level": recommendation.expertise_level.value,
+        "scaffolding_level": round(recommendation.scaffolding_level, 2),
+        "fade_strategy": recommendation.fade_strategy,
+        "specific_recommendations": recommendation.specific_recommendations,
+        "rationale": recommendation.rationale,
+    }
+
+
+@router.post("/cognitive-load/check-intervention")
+async def check_intervention_needed(request: InterventionCheckRequest):
+    """
+    Check if learning intervention is needed
+
+    Triggers:
+    - Cognitive overload detected
+    - Multiple consecutive errors
+    - Extended time without progress
+    """
+    # Convert string to enum
+    try:
+        load_level = CognitiveLoadLevel(request.cognitive_load_level)
+    except ValueError:
+        load_level = CognitiveLoadLevel.OPTIMAL
+
+    try:
+        expertise = ExpertiseLevel(request.expertise_level)
+    except ValueError:
+        expertise = ExpertiseLevel.INTERMEDIATE
+
+    # Create estimate object
+    from app.adaptive.cognitive_load import CognitiveLoadEstimate
+    estimate = CognitiveLoadEstimate(
+        level=load_level,
+        score=request.cognitive_load_score,
+        intrinsic_load=request.cognitive_load_score * 0.5,
+        extraneous_load=0.2,
+        germane_load=0.3,
+        confidence=0.8,
+        indicators={},
+    )
+
+    # Check if intervention needed
+    should_intervene, intervention_type = cognitive_load_estimator.should_intervene(
+        cognitive_load=estimate,
+        consecutive_errors=request.consecutive_errors,
+        time_on_task_minutes=request.time_on_task_minutes,
+    )
+
+    # Get intervention details
+    intervention = cognitive_load_estimator.get_intervention_recommendation(
+        intervention_type=intervention_type,
+        expertise_level=expertise,
+    )
+
+    return {
+        "should_intervene": should_intervene,
+        "intervention_type": intervention_type,
+        "action": intervention["action"],
+        "message": intervention["message"],
+        "recommendations": intervention["recommendations"],
+    }
+
+
+@router.post("/cognitive-load/optimal-difficulty")
+async def get_optimal_difficulty(
+    expertise_level: str,
+    current_mastery: float,
+    cognitive_load_score: float,
+    cognitive_load_level: str,
+):
+    """
+    Calculate optimal content difficulty range
+
+    Based on:
+    - Expertise level
+    - Current mastery
+    - Cognitive load state
+    - ZPD principles
+    """
+    # Convert strings to enums
+    try:
+        expertise = ExpertiseLevel(expertise_level)
+    except ValueError:
+        expertise = ExpertiseLevel.INTERMEDIATE
+
+    try:
+        load_level = CognitiveLoadLevel(cognitive_load_level)
+    except ValueError:
+        load_level = CognitiveLoadLevel.OPTIMAL
+
+    # Create estimate
+    from app.adaptive.cognitive_load import CognitiveLoadEstimate
+    estimate = CognitiveLoadEstimate(
+        level=load_level,
+        score=cognitive_load_score,
+        intrinsic_load=cognitive_load_score * 0.5,
+        extraneous_load=0.2,
+        germane_load=0.3,
+        confidence=0.8,
+        indicators={},
+    )
+
+    # Calculate optimal difficulty
+    min_diff, max_diff = cognitive_load_estimator.calculate_optimal_difficulty(
+        expertise_level=expertise,
+        current_mastery=current_mastery,
+        cognitive_load=estimate,
+    )
+
+    return {
+        "min_difficulty": round(min_diff, 1),
+        "max_difficulty": round(max_diff, 1),
+        "optimal_difficulty": round((min_diff + max_diff) / 2, 1),
+        "rationale": f"Based on {expertise.value} expertise, {current_mastery:.0%} mastery, {load_level.value} cognitive load",
+    }
+
+
+def _get_load_interpretation(level: CognitiveLoadLevel) -> str:
+    """Get human-readable interpretation of cognitive load level"""
+    interpretations = {
+        CognitiveLoadLevel.LOW: "Under-challenged. Consider increasing difficulty or reducing scaffolding.",
+        CognitiveLoadLevel.OPTIMAL: "In optimal learning zone. Current challenge level is appropriate.",
+        CognitiveLoadLevel.HIGH: "Challenged but managing. Monitor for signs of overload.",
+        CognitiveLoadLevel.OVERLOAD: "Cognitive overload detected. Reduce complexity or provide support.",
+    }
+    return interpretations.get(level, "Unknown")
+
+
+def _get_expertise_description(level: ExpertiseLevel) -> str:
+    """Get description of expertise level"""
+    descriptions = {
+        ExpertiseLevel.NOVICE: "New to the topic. Benefits from full scaffolding and worked examples.",
+        ExpertiseLevel.BEGINNER: "Basic understanding. Benefits from partial scaffolding.",
+        ExpertiseLevel.INTERMEDIATE: "Solid grasp of fundamentals. Minimal scaffolding recommended.",
+        ExpertiseLevel.ADVANCED: "Strong command of material. Scaffolding may slow learning.",
+        ExpertiseLevel.EXPERT: "Expert level. Scaffolding can be counterproductive (expertise reversal).",
+    }
+    return descriptions.get(level, "Unknown")
+
+
+def _get_scaffolding_level(level: ExpertiseLevel) -> str:
+    """Get recommended scaffolding level for expertise"""
+    levels = {
+        ExpertiseLevel.NOVICE: "full",
+        ExpertiseLevel.BEGINNER: "high",
+        ExpertiseLevel.INTERMEDIATE: "moderate",
+        ExpertiseLevel.ADVANCED: "minimal",
+        ExpertiseLevel.EXPERT: "none",
+    }
+    return levels.get(level, "moderate")
+
+
+# ============== Interleaved Practice ==============
+
+class ConceptProficiencyInput(BaseModel):
+    """Input model for concept proficiency"""
+    concept_id: int = Field(..., description="Concept ID")
+    concept_name: str = Field(..., description="Concept name")
+    mastery_level: float = Field(..., ge=0, le=1, description="Mastery level 0-1")
+    practice_count: int = Field(default=0, ge=0, description="Total practice count")
+    recent_accuracy: float = Field(default=0.5, ge=0, le=1, description="Recent accuracy")
+    last_practiced: Optional[datetime] = Field(default=None, description="Last practice time")
+    stability: float = Field(default=0.0, ge=0, description="FSRS stability")
+
+
+class PracticeItemInput(BaseModel):
+    """Input model for practice item"""
+    item_id: str = Field(..., description="Item ID")
+    concept_id: int = Field(..., description="Concept ID")
+    concept_name: str = Field(..., description="Concept name")
+    difficulty: float = Field(default=5.0, ge=1, le=10, description="Difficulty 1-10")
+    item_type: str = Field(default="problem", description="Item type")
+    content: Optional[Dict] = Field(default=None, description="Item content")
+
+
+class PracticeSequenceRequest(BaseModel):
+    """Request for generating practice sequence"""
+    concept_proficiencies: List[ConceptProficiencyInput] = Field(
+        ..., min_length=1, description="User's concept proficiencies"
+    )
+    available_items: Dict[str, List[PracticeItemInput]] = Field(
+        ..., description="Available items per concept (concept_id as string key)"
+    )
+    target_items: int = Field(default=10, ge=1, le=50, description="Target items")
+    target_duration_minutes: int = Field(default=15, ge=1, le=60, description="Target duration")
+    target_concept_id: Optional[int] = Field(default=None, description="Focus concept")
+
+
+class PracticeModeRequest(BaseModel):
+    """Request for determining practice mode"""
+    concept_proficiencies: List[ConceptProficiencyInput] = Field(
+        ..., min_length=1, description="User's concept proficiencies"
+    )
+    target_concept_id: Optional[int] = Field(default=None, description="Target concept")
+
+
+@router.post("/interleaved/practice-mode")
+async def determine_practice_mode(request: PracticeModeRequest):
+    """
+    Determine optimal practice mode based on proficiencies
+
+    Research basis: Hybrid scheduling
+    - Blocked practice for concepts below 75% proficiency
+    - Interleaved practice for concepts at/above 75%
+
+    Returns recommended practice mode with rationale.
+    """
+    # Convert input to ConceptProficiency objects
+    proficiencies = [
+        ConceptProficiency(
+            concept_id=p.concept_id,
+            concept_name=p.concept_name,
+            mastery_level=p.mastery_level,
+            practice_count=p.practice_count,
+            recent_accuracy=p.recent_accuracy,
+            last_practiced=p.last_practiced,
+            stability=p.stability,
+        )
+        for p in request.concept_proficiencies
+    ]
+
+    mode, rationale = interleaved_scheduler.determine_practice_mode(
+        concept_proficiencies=proficiencies,
+        target_concept_id=request.target_concept_id,
+    )
+
+    # Count concepts in each category
+    ready_count = sum(1 for p in proficiencies if p.mastery_level >= 0.75)
+    learning_count = sum(1 for p in proficiencies if p.mastery_level < 0.75)
+
+    return {
+        "mode": mode.value,
+        "rationale": rationale,
+        "statistics": {
+            "total_concepts": len(proficiencies),
+            "ready_for_interleaving": ready_count,
+            "still_learning": learning_count,
+            "interleave_threshold": 0.75,
+        }
+    }
+
+
+@router.post("/interleaved/generate-sequence")
+async def generate_practice_sequence(request: PracticeSequenceRequest):
+    """
+    Generate optimal practice sequence
+
+    Research basis: Interleaved Practice (g=0.42 effect size)
+    - Hybrid scheduling: blocked for acquisition, interleaved for retention
+    - Optimal spacing between same-concept items
+    - Contextual interference for discrimination learning
+    """
+    # Convert proficiencies
+    proficiencies = [
+        ConceptProficiency(
+            concept_id=p.concept_id,
+            concept_name=p.concept_name,
+            mastery_level=p.mastery_level,
+            practice_count=p.practice_count,
+            recent_accuracy=p.recent_accuracy,
+            last_practiced=p.last_practiced,
+            stability=p.stability,
+        )
+        for p in request.concept_proficiencies
+    ]
+
+    # Convert available items (handle string keys from JSON)
+    available_items: Dict[int, List[PracticeItem]] = {}
+    for concept_id_str, items in request.available_items.items():
+        concept_id = int(concept_id_str)
+        available_items[concept_id] = [
+            PracticeItem(
+                item_id=item.item_id,
+                concept_id=item.concept_id,
+                concept_name=item.concept_name,
+                difficulty=item.difficulty,
+                item_type=item.item_type,
+                content=item.content or {},
+            )
+            for item in items
+        ]
+
+    # Generate sequence
+    sequence = interleaved_scheduler.generate_practice_sequence(
+        concept_proficiencies=proficiencies,
+        available_items=available_items,
+        target_items=request.target_items,
+        target_duration_minutes=request.target_duration_minutes,
+        target_concept_id=request.target_concept_id,
+    )
+
+    return {
+        "mode": sequence.mode.value,
+        "items": [
+            {
+                "item_id": item.item_id,
+                "concept_id": item.concept_id,
+                "concept_name": item.concept_name,
+                "difficulty": item.difficulty,
+                "item_type": item.item_type,
+            }
+            for item in sequence.items
+        ],
+        "concepts_included": sequence.concepts_included,
+        "estimated_duration_minutes": sequence.estimated_duration_minutes,
+        "interleaving_ratio": round(sequence.interleaving_ratio, 3),
+        "rationale": sequence.rationale,
+        "total_items": len(sequence.items),
+    }
+
+
+@router.post("/interleaved/prioritize")
+async def prioritize_concepts_for_practice(
+    concept_proficiencies: List[ConceptProficiencyInput],
+):
+    """
+    Prioritize concepts for interleaved practice
+
+    Considers:
+    - Spacing benefit (FSRS integration)
+    - Proficiency level
+    - Time since last practice
+    """
+    # Convert proficiencies
+    proficiencies = [
+        ConceptProficiency(
+            concept_id=p.concept_id,
+            concept_name=p.concept_name,
+            mastery_level=p.mastery_level,
+            practice_count=p.practice_count,
+            recent_accuracy=p.recent_accuracy,
+            last_practiced=p.last_practiced,
+            stability=p.stability,
+        )
+        for p in concept_proficiencies
+    ]
+
+    # Get prioritized list
+    prioritized = interleaved_scheduler.prioritize_for_interleaving(proficiencies)
+
+    return {
+        "prioritized_concepts": [
+            {
+                "concept_id": prof.concept_id,
+                "concept_name": prof.concept_name,
+                "mastery_level": round(prof.mastery_level, 3),
+                "priority_score": round(score, 3),
+                "last_practiced": prof.last_practiced.isoformat() if prof.last_practiced else None,
+            }
+            for prof, score in prioritized
+        ],
+        "total_concepts": len(prioritized),
+    }
+
+
+@router.get("/interleaved/spacing-benefit")
+async def calculate_spacing_benefit(
+    last_practiced: Optional[datetime] = None,
+    stability: float = 1.0,
+):
+    """
+    Calculate benefit of practicing now based on spacing
+
+    Integrates with FSRS to determine optimal practice timing.
+
+    Returns higher score when:
+    - More time has passed since last practice
+    - Retrievability is declining
+    """
+    benefit = interleaved_scheduler.calculate_spacing_benefit(
+        last_practiced=last_practiced,
+        stability=stability,
+    )
+
+    return {
+        "spacing_benefit": round(benefit, 3),
+        "last_practiced": last_practiced.isoformat() if last_practiced else None,
+        "stability": stability,
+        "recommendation": _get_spacing_recommendation(benefit),
+    }
+
+
+@router.post("/interleaved/statistics")
+async def get_interleaving_statistics(
+    session_history: List[Dict],
+):
+    """
+    Get statistics about interleaving patterns from practice history
+
+    Useful for analyzing effectiveness and tuning parameters.
+    """
+    stats = interleaved_scheduler.get_interleaving_statistics(session_history)
+
+    return {
+        "statistics": stats,
+        "recommendations": _get_interleaving_recommendations(stats),
+    }
+
+
+def _get_spacing_recommendation(benefit: float) -> str:
+    """Get recommendation based on spacing benefit"""
+    if benefit > 0.8:
+        return "High benefit - optimal time to practice this concept"
+    elif benefit > 0.5:
+        return "Moderate benefit - good time for practice"
+    elif benefit > 0.2:
+        return "Low benefit - concept still fresh, consider other priorities"
+    else:
+        return "Very low benefit - recently practiced, focus on other concepts"
+
+
+def _get_interleaving_recommendations(stats: Dict) -> List[str]:
+    """Get recommendations based on interleaving statistics"""
+    recommendations = []
+
+    avg_ratio = stats.get("avg_interleaving_ratio", 0)
+    mode_dist = stats.get("mode_distribution", {})
+    avg_concepts = stats.get("avg_concepts_per_session", 0)
+
+    if avg_ratio < 0.3:
+        recommendations.append(
+            "Low interleaving ratio. Consider increasing variety across concepts."
+        )
+    elif avg_ratio > 0.9:
+        recommendations.append(
+            "Very high interleaving. Some blocked practice may help initial acquisition."
+        )
+
+    if avg_concepts < 2:
+        recommendations.append(
+            "Few concepts per session. Include more concepts when proficiency allows."
+        )
+    elif avg_concepts > 5:
+        recommendations.append(
+            "Many concepts per session. Consider focusing on fewer for deeper practice."
+        )
+
+    blocked_pct = mode_dist.get("blocked", 0)
+    if blocked_pct > 0.7:
+        recommendations.append(
+            "Mostly blocked practice. Work on building proficiency to enable interleaving."
+        )
+
+    if not recommendations:
+        recommendations.append("Good interleaving balance. Continue current approach.")
+
+    return recommendations

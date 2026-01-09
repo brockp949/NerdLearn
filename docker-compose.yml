@@ -172,6 +172,7 @@ services:
     container_name: nerdlearn-web
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
+      API_URL: http://api:8000  # For server-side rewrites
     ports:
       - "3000:3000"
     depends_on:
