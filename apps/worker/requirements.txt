@@ -1,6 +1,6 @@
 # Task Queue
 celery[redis]==5.3.4
-redis==5.0.1
+redis==4.6.0
 
 # Document Processing
 PyPDF2==3.0.1

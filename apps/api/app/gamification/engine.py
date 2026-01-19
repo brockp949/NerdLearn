@@ -206,20 +206,25 @@ class GamificationEngine:
     @staticmethod
     def calculate_streak(
         last_activity_date: Optional[datetime],
-        current_streak: int
-    ) -> Tuple[int, bool]:
+        current_streak: int,
+        streak_freezes_available: int = 0
+    ) -> Tuple[int, bool, bool]:
         """
-        Calculate current streak
+        Calculate current streak with ethical "Safe-Guard" (Streak Freeze)
+        
+        Research Foundation: Non-addictive reward schedules should minimize 
+        negative reinforcement (loss aversion) during valid life disruptions.
 
         Args:
             last_activity_date: Last activity timestamp
             current_streak: Current streak count
+            streak_freezes_available: Number of freeze items owned
 
         Returns:
-            (New streak count, Is active today)
+            (New streak count, Is active today, Was freeze used)
         """
         if not last_activity_date:
-            return 0, False
+            return 0, False, False
 
         now = datetime.now()
         today = now.date()
@@ -227,14 +232,21 @@ class GamificationEngine:
 
         # Check if activity today
         if last_date == today:
-            return current_streak, True
+            return current_streak, True, False
 
         # Check if yesterday (streak continues)
         if last_date == today - timedelta(days=1):
-            return current_streak, False
+            return current_streak, False, False
+
+        # Streak potentially broken - check for freeze safe-guard
+        if streak_freezes_available > 0:
+            # We assume a freeze is used automatically if the gap is only 1 day
+            # (or for the current day if missed yesterday)
+            if last_date == today - timedelta(days=2):
+                return current_streak, False, True
 
         # Streak broken
-        return 0, False
+        return 0, False, False
 
     @staticmethod
     def award_xp(

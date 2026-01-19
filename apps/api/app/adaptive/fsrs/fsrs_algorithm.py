@@ -113,7 +113,8 @@ class FSRSAlgorithm:
         """
         Calculate retrievability (probability of recall)
 
-        Formula: R(t,S) = (1 + t/(9*S))^(-1)
+        Formula: R(t,S) = 0.9^(t/S)
+        Based on最新的 FSRS research for exponential memory decay.
 
         Args:
             elapsed_days: Days since last review
@@ -124,7 +125,7 @@ class FSRSAlgorithm:
         """
         if stability == 0:
             return 0.0
-        return pow(1 + elapsed_days / (9 * stability), -1)
+        return math.pow(0.9, elapsed_days / stability)
 
     def init_stability(self, rating: Rating) -> float:
         """
@@ -224,6 +225,9 @@ class FSRSAlgorithm:
         """
         Calculate optimal next review interval
 
+        Formula: I = S * ln(R_req) / ln(0.9)
+        Derived from R = 0.9^(I/S)
+
         Args:
             stability: Memory stability
 
@@ -232,11 +236,9 @@ class FSRSAlgorithm:
         """
         # Calculate interval that maintains target retention
         request_retention = self.params["request_retention"]
-        interval = (
-            stability
-            / self.w[9]
-            * (pow(request_retention, 1 / self.w[14]) - 1)
-        )
+        
+        # Logarithmic derivation for the next interval
+        interval = stability * (math.log(request_retention) / math.log(0.9))
 
         # Apply constraints
         interval = max(1, min(self.params["maximum_interval"], int(interval)))

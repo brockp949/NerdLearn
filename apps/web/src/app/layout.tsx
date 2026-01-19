@@ -18,8 +18,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
-      <body className={cn(inter.variable, outfit.variable, "font-sans min-h-screen bg-background text-foreground antialiased")}>
+    <html lang="en" className="dark" suppressHydrationWarning>
+      <body className={cn(inter.variable, outfit.variable, "font-sans min-h-screen bg-background text-foreground antialiased")} suppressHydrationWarning>
         <div className="relative flex min-h-screen flex-col">
           <Navbar />
           <main className="flex-1 pt-16">

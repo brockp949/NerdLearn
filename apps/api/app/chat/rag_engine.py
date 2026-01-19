@@ -6,7 +6,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 from pydantic import BaseModel
 import openai
-from app.config import settings
+from app.core.config import settings
 
 
 class Citation(BaseModel):
@@ -48,30 +48,49 @@ class RAGChatEngine:
         openai.api_key = openai_api_key
         self.conversation_history: Dict[str, List[ChatMessage]] = {}
 
-    def retrieve_context(
+    async def _generate_hypothetical_document(self, query: str) -> str:
+        """
+        Generate a hypothetical document based on the query (HyDE)
+        """
+        messages = [
+            {"role": "system", "content": "You are a teacher writing a brief, factual paragraph to answer a student's question. Use placeholder terms if details are unknown."},
+            {"role": "user", "content": f"Write a one-paragraph factual answer to this question: {query}"}
+        ]
+        
+        try:
+            response = openai.chat.completions.create(
+                model="gpt-3.5-turbo", # Use a smaller model for speed
+                messages=messages,
+                temperature=0.3,
+                max_tokens=200,
+            )
+            return response.choices[0].message.content
+        except:
+            return query # Fallback to original query on error
+
+    async def retrieve_context(
         self,
         query: str,
         course_id: int,
         vector_store_service,
         top_k: int = 5,
         module_id: Optional[int] = None,
+        use_hyde: bool = True
     ) -> List[Citation]:
         """
-        Retrieve relevant context from vector store
-
-        Args:
-            query: User query
-            course_id: Course ID
-            vector_store_service: Vector store service instance
-            top_k: Number of results to retrieve
-            module_id: Optional module filter
-
-        Returns:
-            List of citations with relevant content
+        Retrieve relevant context from vector store with optional HyDE expansion
         """
+        search_query = query
+        
+        if use_hyde:
+            # Expand query using HyDE
+            hypothetical_doc = await self._generate_hypothetical_document(query)
+            # Combine original query with hypothetical doc for expansion
+            search_query = f"{query}\n{hypothetical_doc}"
+
         # Search vector store
         results = vector_store_service.search(
-            query=query,
+            query=search_query,
             course_id=course_id,
             module_id=module_id,
             limit=top_k,

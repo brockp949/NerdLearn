@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings
-from typing import List
+from typing import List, Dict
 
 
 class Settings(BaseSettings):
@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     MINIO_ACCESS_KEY: str = "minioadmin"
     MINIO_SECRET_KEY: str = "minioadmin"
     MINIO_BUCKET: str = "nerdlearn"
+    QDRANT_COLLECTION: str = "course_chunks"
+    VECTOR_SIZE: int = 1536
+    EMBEDDING_MODEL: str = "text-embedding-3-small"
 
     # OpenAI
     OPENAI_API_KEY: str = ""

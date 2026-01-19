@@ -33,36 +33,3 @@ class UserConceptMastery(Base):
 
     # Relationships
     user = relationship("User", back_populates="mastery_records")
-
-
-class SpacedRepetitionCard(Base):
-    """
-    FSRS (Free Spaced Repetition Scheduler) implementation
-    Each card represents a concept-user pair for spaced repetition
-    """
-    __tablename__ = "spaced_repetition_cards"
-
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    concept_id = Column(String, nullable=False)
-    course_id = Column(Integer, ForeignKey("courses.id"), nullable=False)
-
-    # FSRS parameters
-    stability = Column(Float, default=1.0)  # S - memory stability
-    difficulty = Column(Float, default=5.0)  # D - item difficulty (0-10)
-    retrievability = Column(Float, default=1.0)  # R - current retrievability
-
-    # Review scheduling
-    due_date = Column(DateTime(timezone=True), nullable=False)
-    last_review_date = Column(DateTime(timezone=True))
-    review_count = Column(Integer, default=0)
-
-    # Performance tracking
-    average_rating = Column(Float, default=0.0)  # User rating (1-5)
-
-    # Timestamps
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-
-    # Relationships
-    user = relationship("User", back_populates="spaced_repetition_cards")

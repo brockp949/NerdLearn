@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir:*)",
+      "Bash(find:*)",
+      "Bash(mkdir:*)",
+      "Bash(python:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nfeat(adaptive): Add DKT, ECD Framework, and FSRS Parameter Learning\n\nMedium priority enhancements to the adaptive learning engine:\n\n1. Deep Knowledge Tracing (DKT/Transformer)\n   - LSTM-based DKT and SAKT (Transformer) models\n   - DKTLite for lightweight inference without PyTorch\n   - Achieves ~AUC 0.83 vs BKT''s ~0.75\n\n2. Evidence-Centered Design (ECD) Framework\n   - Competency Model: Knowledge types, levels, prerequisites\n   - Task Model: Pre-registered learning tasks with features\n   - Evidence Model: Enhanced evidence rules (engagement, sophistication, problem-solving)\n   - Assembly Model: Bayesian, weighted average, trend-based evidence accumulation\n\n3. FSRS Parameter Learning\n   - Per-user optimization of 17-parameter weight vector\n   - Gradient descent and Nelder-Mead optimization\n   - Multiple loss functions (log-loss, RMSE, weighted)\n   - Enables 5-10% improvement through personalization\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git push)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nfeat(adaptive): Complete research-aligned adaptive learning enhancements\n\nImplements remaining research-backed features for adaptive learning:\n\nMulti-Armed Bandits (content selection):\n- Thompson Sampling, UCB1, Epsilon-Greedy, Contextual Bandits\n- ContentSelector API for optimal content recommendations\n\nGamification Enhancements:\n- Novelty tracking with research-based decay thresholds (~4 weeks)\n- Social features with leaderboards (global, friends, course, weekly)\n- Privacy controls for leaderboard visibility\n\nPrivacy-Preserving ML:\n- Differential privacy (Laplace, Gaussian, Exponential mechanisms)\n- Privacy budget tracking (epsilon/delta)\n- Private aggregation for learning analytics\n\nMental Model Detection:\n- Misconception detection and tracking\n- Error pattern analysis\n- Remediation strategy recommendations\n\nResponse Time Analysis:\n- ZPD enhancement with timing patterns\n- Cognitive load estimation\n- Optimal pacing recommendations\n\nKnowledge Graph:\n- Neo4j integration for concept relationships\n- Learning path generation\n- Enhanced graph API endpoints\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git push:*)",
+      "Bash(claude mcp list:*)",
+      "Bash(claude plugins list:*)",
+      "Bash(where:*)",
+      "Bash(gemini --version:*)",
+      "Bash(gemini)",
+      "Bash(claude mcp add postgres -- cmd /c \"npx -y @modelcontextprotocol/server-postgres postgresql://postgres:postgres@localhost:5432/nerdlearn\")",
+      "Bash(claude mcp add github --env GITHUB_PERSONAL_ACCESS_TOKEN=env:GITHUB_TOKEN -- cmd /c \"npx -y @modelcontextprotocol/server-github\")",
+      "Bash(claude mcp add filesystem -- cmd /c \"npx -y @modelcontextprotocol/server-filesystem C:\\Users\\brock\\Documents\\NerdLearn\\NerdLearn\")",
+      "Bash(curl:*)",
+      "Bash(docker ps:*)",
+      "Bash(pip show:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(docker logs:*)",
+      "Bash(DATABASE_URL=\"postgresql+asyncpg://nerdlearn:password@localhost:5432/nerdlearn\" NEO4J_URI=\"bolt://localhost:7687\" NEO4J_USER=\"neo4j\" NEO4J_PASSWORD=\"password\" REDIS_URL=\"redis://localhost:6379\" QDRANT_HOST=\"localhost\" QDRANT_PORT=\"6333\" python:*)",
+      "Bash(pip install:*)",
+      "Bash(claude mcp add memory -- cmd /c \"npx -y @modelcontextprotocol/server-memory\")",
+      "Bash(claude mcp add:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

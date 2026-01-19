@@ -4,8 +4,8 @@ from sqlalchemy import select, and_
 from app.core.database import get_db
 from app.models.gamification import ChatHistory
 from app.models.assessment import UserConceptMastery
-from app.chat import RAGChatEngine, ChatMessage
-from app.config import settings
+from app.chat import RAGChatEngine
+from app.core.config import settings
 from pydantic import BaseModel
 from typing import Optional, List, Dict
 import os
@@ -28,11 +28,47 @@ class ChatRequest(BaseModel):
     module_id: Optional[int] = None
 
 
+
+class Citation(BaseModel):
+    """Citation model matches RAG engine output"""
+    module_id: int
+    module_title: str
+    module_type: str
+    chunk_text: str
+    page_number: Optional[int] = None
+    timestamp_start: Optional[float] = None
+    timestamp_end: Optional[float] = None
+    relevance_score: float
+
+
 class ChatResponse(BaseModel):
     """Chat response model"""
     message: str
-    citations: List[Dict]
+    citations: List[Citation]
     xp_earned: int = 5
+
+
+class ChatMessage(BaseModel):
+    """Chat message model for history"""
+    role: str
+    content: str
+    citations: List[Citation]
+    timestamp: str
+
+
+class ChatHistoryResponse(BaseModel):
+    """History response model"""
+    user_id: int
+    course_id: int
+    session_id: str
+    message_count: int
+    messages: List[ChatMessage]
+
+
+class ChatClearResponse(BaseModel):
+    """Clear history response model"""
+    message: str
+    messages_deleted: int
 
 
 @router.post("/", response_model=ChatResponse)
@@ -45,7 +81,7 @@ async def chat_with_content(
 
     Returns contextualized responses with citations
     """
-    from app.worker.app.services.vector_store import VectorStoreService
+    from app.services.vector_store import VectorStoreService
     from app.gamification import GamificationEngine
 
     try:
@@ -108,7 +144,7 @@ async def chat_with_content(
         raise HTTPException(status_code=500, detail=f"Chat failed: {str(e)}")
 
 
-@router.get("/history")
+@router.get("/history", response_model=ChatHistoryResponse)
 async def get_chat_history(
     user_id: int,
     course_id: int,
@@ -119,39 +155,42 @@ async def get_chat_history(
     """Get chat history for a session"""
     session_filter = session_id or "default"
 
-    result = await db.execute(
-        select(ChatHistory)
-        .where(
-            and_(
-                ChatHistory.user_id == user_id,
-                ChatHistory.course_id == course_id,
-                ChatHistory.session_id == session_filter,
+    try:
+        result = await db.execute(
+            select(ChatHistory)
+            .where(
+                and_(
+                    ChatHistory.user_id == user_id,
+                    ChatHistory.course_id == course_id,
+                    ChatHistory.session_id == session_filter,
+                )
             )
+            .order_by(ChatHistory.timestamp.desc())
+            .limit(limit)
         )
-        .order_by(ChatHistory.timestamp.desc())
-        .limit(limit)
-    )
 
-    messages = result.scalars().all()
+        messages = result.scalars().all()
 
-    return {
-        "user_id": user_id,
-        "course_id": course_id,
-        "session_id": session_filter,
-        "message_count": len(messages),
-        "messages": [
-            {
-                "role": msg.role,
-                "content": msg.content,
-                "citations": msg.citations,
-                "timestamp": msg.timestamp.isoformat(),
-            }
-            for msg in reversed(messages)
-        ],
-    }
+        return ChatHistoryResponse(
+            user_id=user_id,
+            course_id=course_id,
+            session_id=session_filter,
+            message_count=len(messages),
+            messages=[
+                ChatMessage(
+                    role=msg.role,
+                    content=msg.content,
+                    citations=[Citation(**c) for c in msg.citations] if msg.citations else [],
+                    timestamp=msg.timestamp.isoformat()
+                )
+                for msg in reversed(messages)
+            ]
+        )
+    except Exception as e:
+         raise HTTPException(status_code=500, detail=f"Failed to fetch history: {str(e)}")
 
 
-@router.delete("/history")
+@router.delete("/history", response_model=ChatClearResponse)
 async def clear_chat_history(
     user_id: int,
     session_id: Optional[str] = None,
@@ -160,26 +199,29 @@ async def clear_chat_history(
     """Clear chat history for a session"""
     session_filter = session_id or "default"
 
-    # Clear from database
-    result = await db.execute(
-        select(ChatHistory).where(
-            and_(
-                ChatHistory.user_id == user_id,
-                ChatHistory.session_id == session_filter,
+    try:
+        # Clear from database
+        result = await db.execute(
+            select(ChatHistory).where(
+                and_(
+                    ChatHistory.user_id == user_id,
+                    ChatHistory.session_id == session_filter,
+                )
             )
         )
-    )
-    messages = result.scalars().all()
+        messages = result.scalars().all()
 
-    for msg in messages:
-        await db.delete(msg)
+        for msg in messages:
+            await db.delete(msg)
 
-    await db.commit()
+        await db.commit()
 
-    # Clear from RAG engine memory
-    rag_engine.clear_history(user_id, session_filter)
+        # Clear from RAG engine memory
+        rag_engine.clear_history(user_id, session_filter)
 
-    return {
-        "message": "Chat history cleared",
-        "messages_deleted": len(messages),
-    }
+        return ChatClearResponse(
+            message="Chat history cleared",
+            messages_deleted=len(messages)
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to clear history: {str(e)}")

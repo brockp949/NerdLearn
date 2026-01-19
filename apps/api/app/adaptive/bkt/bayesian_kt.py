@@ -11,7 +11,7 @@ Parameters:
 Formula:
 P(Lt) = P(Lt-1 | evidence) + (1 - P(Lt-1 | evidence)) * P(T)
 """
-from typing import Dict, Tuple, Optional
+from typing import Dict, Tuple, Optional, List
 import math
 
 
@@ -215,3 +215,47 @@ class BayesianKnowledgeTracer:
             sessions += 1
 
         return sessions if sessions < max_sessions else -1  # -1 means unlikely to master
+
+    def calibrate_parameters(
+        self, history: List[Tuple[float, bool]], learning_rate: float = 0.05
+    ) -> Dict[str, float]:
+        """
+        Simple parameter learning loop to adjust P(G) and P(S) based on residuals
+        
+        Args:
+            history: List of (mastery_before, observation_correct)
+            learning_rate: How quickly to adjust parameters
+            
+        Returns:
+            Updated parameters
+        """
+        g_deltas = []
+        s_deltas = []
+
+        for mastery, correct in history:
+            prediction = self.predict_performance(mastery)
+            p_correct = prediction["p_correct"]
+            
+            # If we predict wrong but user is correct (and mastery is low) => P(G) might be higher
+            if correct and mastery < 0.3:
+                # Residue positive: user outperformed expectation
+                g_deltas.append(1.0 - p_correct)
+            
+            # If we predict correct but user is wrong (and mastery is high) => P(S) might be higher
+            if not correct and mastery > 0.7:
+                # Residue negative: user underperformed expectation
+                s_deltas.append(p_correct)
+
+        if g_deltas:
+            avg_g_delta = sum(g_deltas) / len(g_deltas)
+            self.p_g = max(0.01, min(0.5, self.p_g + avg_g_delta * learning_rate))
+        
+        if s_deltas:
+            avg_s_delta = sum(s_deltas) / len(s_deltas)
+            self.p_s = max(0.01, min(0.5, self.p_s + avg_s_delta * learning_rate))
+
+        # Update params dict
+        self.params["p_g"] = self.p_g
+        self.params["p_s"] = self.p_s
+        
+        return self.params

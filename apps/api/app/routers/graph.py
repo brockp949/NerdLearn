@@ -70,6 +70,19 @@ class GraphResponse(BaseModel):
     meta: dict
 
 
+class ConceptExtractionResponse(BaseModel):
+    """Response model for concept extraction"""
+    concepts: List[str]
+    count: int
+    method: str
+
+
+class LegacyGraphResponse(BaseModel):
+    """Legacy response for force-graph compatibility"""
+    nodes: List[dict]
+    links: List[dict]
+
+
 # ============== Endpoints ==============
 
 @router.get("/courses/{course_id}", response_model=GraphResponse)
@@ -377,7 +390,7 @@ async def detect_prerequisites(
 
 # ============== Utility Endpoints ==============
 
-@router.post("/extract-concepts")
+@router.post("/extract-concepts", response_model=ConceptExtractionResponse)
 async def extract_concepts_from_text(
     text: str = Query(..., min_length=10, description="Text to extract concepts from"),
     min_freq: int = Query(default=1, ge=1, description="Minimum frequency threshold"),
@@ -391,17 +404,17 @@ async def extract_concepts_from_text(
     """
     try:
         concepts = graph_service.extract_concepts(text, min_freq)
-        return {
-            "concepts": concepts,
-            "count": len(concepts),
-            "method": "pattern_matching"
-        }
+        return ConceptExtractionResponse(
+            concepts=concepts,
+            count=len(concepts),
+            method="pattern_matching"
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to extract concepts: {str(e)}")
 
 
 # Legacy endpoint for backwards compatibility
-@router.get("/")
+@router.get("/", response_model=LegacyGraphResponse)
 async def get_graph_legacy(
     course_id: Optional[int] = Query(default=1, description="Course ID (defaults to 1)"),
     graph_service: AsyncGraphService = Depends(get_graph_service)
@@ -428,13 +441,11 @@ async def get_graph_legacy(
             for edge in graph.get("edges", [])
         ]
 
-        return {
-            "nodes": graph.get("nodes", []),
-            "links": links,  # Frontend expects 'links' not 'edges'
-        }
+        return LegacyGraphResponse(
+            nodes=graph.get("nodes", []),
+            links=links
+        )
     except Exception as e:
-        # Return empty graph on error (e.g., Neo4j not running)
-        return {
-            "nodes": [],
-            "links": [],
-        }
+        # Log the error here in a real app (e.g. logger.error(f"Legacy graph error: {e}"))
+        # Return empty graph on error to prevent frontend crash
+        return LegacyGraphResponse(nodes=[], links=[])

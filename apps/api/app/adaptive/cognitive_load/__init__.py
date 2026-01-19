@@ -4,6 +4,7 @@ from .cognitive_load_estimator import (
     ExpertiseLevel,
     CognitiveLoadEstimate,
     ScaffoldingRecommendation,
+    ResponseMetrics,
 )
 
 __all__ = [
@@ -12,4 +13,5 @@ __all__ = [
     "ExpertiseLevel",
     "CognitiveLoadEstimate",
     "ScaffoldingRecommendation",
+    "ResponseMetrics",
 ]

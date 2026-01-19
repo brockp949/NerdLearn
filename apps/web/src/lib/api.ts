@@ -41,4 +41,14 @@ export const graphApi = {
     },
 };
 
+export const adaptiveApi = {
+    estimateCognitiveLoad: async (metrics: any[], currentDifficulty: number = 5.0) => {
+        const response = await api.post('/adaptive/cognitive-load/estimate', {
+            recent_metrics: metrics,
+            content_difficulty: currentDifficulty,
+        });
+        return response.data;
+    },
+};
+
 export default api;

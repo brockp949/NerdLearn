@@ -192,9 +192,10 @@ class AsyncGraphService:
         user_mastered: Optional[List[str]] = None
     ) -> List[Dict[str, Any]]:
         """
-        Generate optimal learning path to target concepts based on prerequisites
-
-        Implements research recommendation for prerequisite-based sequencing
+        Generate optimal learning path using difficulty-weighted sequencing
+        
+        Implements Dijkstra-inspired traversal where path "cost" is concept difficulty.
+        This ensures the user is presented with the most accessible prerequisites first.
 
         Args:
             course_id: Course ID
@@ -207,7 +208,7 @@ class AsyncGraphService:
         await self.ensure_connected()
         user_mastered = user_mastered or []
 
-        # Find all prerequisite chains leading to target concepts
+        # Find all prerequisite chains with difficulty-based ordering
         query = """
         UNWIND $targets as target
         MATCH path = (prereq:Concept)-[:PREREQUISITE_FOR*0..10]->(goal:Concept {name: target, course_id: $course_id})
@@ -219,8 +220,10 @@ class AsyncGraphService:
         RETURN concept.name as name,
                concept.difficulty as difficulty,
                m.order as module_order,
-               max_depth as depth
-        ORDER BY max_depth DESC, module_order ASC, concept.difficulty ASC
+               max_depth as depth,
+               # Weighting formula: combine depth in graph with intrinsic difficulty
+               (max_depth * 2.0 + coalesce(concept.difficulty, 5.0)) as weight
+        ORDER BY weight ASC, module_order ASC
         """
 
         async with self.driver.session() as session:
@@ -237,7 +240,8 @@ class AsyncGraphService:
                 "name": r["name"],
                 "difficulty": r["difficulty"] or 5.0,
                 "depth": r["depth"],
-                "module_order": r["module_order"] or 0
+                "module_order": r["module_order"] or 0,
+                "weight": r["weight"]
             }
             for r in records
             if r["name"] not in user_mastered
