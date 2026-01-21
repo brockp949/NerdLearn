@@ -139,45 +139,103 @@ class ZPDRegulator:
 
         return all_met, avg_mastery
 
+    def check_module_prerequisites(
+        self,
+        module_id: int,
+        module_prerequisites: Dict[int, List[int]],
+        completed_modules: set,
+    ) -> Tuple[bool, List[int]]:
+        """
+        Check if explicit module prerequisites are met.
+
+        Args:
+            module_id: The module to check prerequisites for
+            module_prerequisites: Dict[module_id -> List[prerequisite_module_ids]]
+            completed_modules: Set of module IDs the user has completed
+
+        Returns:
+            (Are all prerequisites met?, List of unmet prerequisite IDs)
+        """
+        prereqs = module_prerequisites.get(module_id, [])
+        if not prereqs:
+            return True, []
+
+        unmet = [p for p in prereqs if p not in completed_modules]
+        return len(unmet) == 0, unmet
+
     def recommend_content(
         self,
         user_concept_masteries: Dict[int, float],
         available_modules: List[Dict],
         concept_prerequisites: Dict[int, List[int]],
         top_n: int = 5,
+        module_prerequisites: Dict[int, List[int]] = None,
+        completed_modules: set = None,
     ) -> List[ContentRecommendation]:
         """
-        Recommend content based on ZPD principles
+        Recommend content based on ZPD principles with module prerequisite support.
 
         Args:
             user_concept_masteries: Dict[concept_id -> mastery_level]
             available_modules: List of available modules with metadata
             concept_prerequisites: Dict[concept_id -> List[prerequisite_ids]]
             top_n: Number of recommendations to return
+            module_prerequisites: Dict[module_id -> List[prerequisite_module_ids]] (explicit)
+            completed_modules: Set of module IDs the user has completed
 
         Returns:
             List of content recommendations sorted by ZPD score
         """
         recommendations = []
+        module_prerequisites = module_prerequisites or {}
+        completed_modules = completed_modules or set()
 
         for module in available_modules:
             module_id = module["id"]
             module_concepts = module.get("concepts", [])
             module_difficulty = module.get("difficulty", 5.0) / 10.0  # Normalize to 0-1
 
+            # Check explicit module-level prerequisites first
+            module_prereqs_met, unmet_modules = self.check_module_prerequisites(
+                module_id, module_prerequisites, completed_modules
+            )
+
+            if not module_prereqs_met:
+                # Create recommendation with low score for unmet prerequisites
+                recommendation = ContentRecommendation(
+                    module_id=module_id,
+                    concept_ids=module_concepts,
+                    zpd_score=0.0,
+                    difficulty=module_difficulty,
+                    rationale=f"Module prerequisites not met: {unmet_modules}",
+                    estimated_success_rate=0.0,
+                )
+                recommendations.append(recommendation)
+                continue
+
             if not module_concepts:
+                # Module without concepts - still recommend based on module order
+                recommendation = ContentRecommendation(
+                    module_id=module_id,
+                    concept_ids=[],
+                    zpd_score=0.5 if module_prereqs_met else 0.0,
+                    difficulty=module_difficulty,
+                    rationale="No concept data - using default difficulty",
+                    estimated_success_rate=0.75,
+                )
+                recommendations.append(recommendation)
                 continue
 
             # Calculate average user mastery for module concepts
             concept_mastery_levels = []
-            all_prerequisites_met = True
+            all_concept_prerequisites_met = True
 
             for concept_id in module_concepts:
                 # Get user's mastery for this concept
                 user_mastery = user_concept_masteries.get(concept_id, 0.0)
                 concept_mastery_levels.append(user_mastery)
 
-                # Check prerequisites
+                # Check concept-level prerequisites
                 prereqs = concept_prerequisites.get(concept_id, [])
                 if prereqs:
                     prereq_masteries = [
@@ -191,12 +249,15 @@ class ZPDRegulator:
                     ]
                     prereqs_met, _ = self.calculate_prerequisite_readiness(prereq_masteries)
                     if not prereqs_met:
-                        all_prerequisites_met = False
+                        all_concept_prerequisites_met = False
 
             if not concept_mastery_levels:
                 continue
 
             avg_mastery = statistics.mean(concept_mastery_levels)
+
+            # Both module and concept prerequisites must be met
+            all_prerequisites_met = module_prereqs_met and all_concept_prerequisites_met
 
             # Calculate ZPD score
             zpd_score, zone = self.calculate_zpd_score(
@@ -215,12 +276,17 @@ class ZPDRegulator:
 
             estimated_success = max(0.0, min(1.0, estimated_success))
 
+            # Add prerequisite info to rationale
+            prereq_status = ""
+            if not all_concept_prerequisites_met:
+                prereq_status = " [Concept prerequisites pending]"
+
             recommendation = ContentRecommendation(
                 module_id=module_id,
                 concept_ids=module_concepts,
                 zpd_score=zpd_score,
                 difficulty=module_difficulty,
-                rationale=f"{zone} | Success rate: {estimated_success:.0%}",
+                rationale=f"{zone} | Success rate: {estimated_success:.0%}{prereq_status}",
                 estimated_success_rate=estimated_success,
             )
 

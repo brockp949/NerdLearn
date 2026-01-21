@@ -59,23 +59,119 @@ def trigger_module_processing(
     return task.id
 
 
-def get_task_status(task_id: str) -> dict:
+def get_task_status(task_id: str) -> str:
     """
-    Get the status of a background task
+    Get the status of a background task.
 
     Args:
         task_id: Celery task ID
 
     Returns:
-        Task status information
+        Task state string (PENDING, STARTED, PROCESSING, SUCCESS, FAILURE, etc.)
+    """
+    result = celery_app.AsyncResult(task_id)
+    return result.state
+
+
+def get_task_progress(task_id: str) -> dict:
+    """
+    Get detailed progress information for a task.
+
+    Args:
+        task_id: Celery task ID
+
+    Returns:
+        Progress information including step, percentage, retry count, etc.
     """
     result = celery_app.AsyncResult(task_id)
 
-    return {
+    progress = {
         "task_id": task_id,
         "status": result.state,
-        "result": result.result if result.ready() else None,
-        "info": result.info,
+        "ready": result.ready(),
+    }
+
+    # Add progress info from task meta
+    if result.info:
+        if isinstance(result.info, dict):
+            progress.update({
+                "step": result.info.get("step"),
+                "retry_count": result.info.get("retry_count", 0),
+                "error": result.info.get("error"),
+                "progress_percentage": result.info.get("progress"),
+                "current_module": result.info.get("current_module"),
+                "module_count": result.info.get("module_count"),
+            })
+        elif isinstance(result.info, Exception):
+            progress["error"] = str(result.info)
+
+    # Add result if completed
+    if result.ready():
+        if result.successful():
+            progress["result"] = result.result
+        else:
+            progress["error"] = str(result.result) if result.result else "Task failed"
+
+    return progress
+
+
+def cancel_task(task_id: str) -> bool:
+    """
+    Cancel a running task.
+
+    Args:
+        task_id: Celery task ID
+
+    Returns:
+        True if cancel signal was sent successfully
+    """
+    try:
+        celery_app.control.revoke(task_id, terminate=True)
+        return True
+    except Exception:
+        return False
+
+
+def get_task_result(task_id: str, timeout: float = None) -> dict:
+    """
+    Get the result of a completed task.
+
+    Args:
+        task_id: Celery task ID
+        timeout: Optional timeout to wait for result
+
+    Returns:
+        Task result or status if not ready
+    """
+    result = celery_app.AsyncResult(task_id)
+
+    if timeout:
+        try:
+            return {
+                "status": "SUCCESS",
+                "result": result.get(timeout=timeout),
+            }
+        except Exception as e:
+            return {
+                "status": result.state,
+                "error": str(e),
+            }
+
+    if result.ready():
+        if result.successful():
+            return {
+                "status": "SUCCESS",
+                "result": result.result,
+            }
+        else:
+            return {
+                "status": "FAILURE",
+                "error": str(result.result),
+            }
+
+    return {
+        "status": result.state,
+        "ready": False,
     }
 
 

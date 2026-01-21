@@ -1,12 +1,23 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import List
+from sqlalchemy.orm import selectinload
+from typing import List, Optional
+from pydantic import BaseModel
 from app.core.database import get_db
-from app.models.course import Course, CourseStatus
+from app.models.course import Course, CourseStatus, Module, ProcessingStatus
 from app.schemas.course import CourseCreate, CourseUpdate, CourseResponse
 
 router = APIRouter()
+
+
+class BatchProcessingResponse(BaseModel):
+    """Response for batch processing request"""
+    task_id: str
+    course_id: int
+    module_count: int
+    message: str
+    mode: str  # "parallel" or "sequential"
 
 
 @router.get("/", response_model=List[CourseResponse])
@@ -124,3 +135,164 @@ async def publish_course(course_id: int, db: AsyncSession = Depends(get_db)):
     await db.refresh(course)
 
     return course
+
+
+# ============== Batch Processing Endpoints ==============
+
+
+@router.post("/{course_id}/process-all", response_model=BatchProcessingResponse)
+async def process_all_modules(
+    course_id: int,
+    mode: str = Query(default="parallel", regex="^(parallel|sequential)$"),
+    reprocess: bool = Query(default=False, description="Reprocess already processed modules"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Process all modules in a course.
+
+    This triggers background processing for all unprocessed modules (or all modules
+    if reprocess=True).
+
+    Args:
+        course_id: Course ID
+        mode: Processing mode - "parallel" (faster) or "sequential" (less resource intensive)
+        reprocess: If True, reprocess even already processed modules
+
+    Returns:
+        Task ID and processing details
+    """
+    # Get course with modules
+    result = await db.execute(
+        select(Course)
+        .options(selectinload(Course.modules))
+        .where(Course.id == course_id)
+    )
+    course = result.scalar_one_or_none()
+
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    # Filter modules to process
+    modules_to_process = []
+    for module in course.modules:
+        # Skip if already processed and not reprocessing
+        if not reprocess and module.processing_status == ProcessingStatus.COMPLETED:
+            continue
+
+        # Skip if currently processing
+        if module.processing_status == ProcessingStatus.PROCESSING:
+            continue
+
+        # Only process PDF and video modules
+        if module.module_type.value not in ("pdf", "video"):
+            continue
+
+        if not module.file_url:
+            continue
+
+        modules_to_process.append({
+            "id": module.id,
+            "type": module.module_type.value,
+            "file_path": module.file_url,
+            "title": module.title,
+        })
+
+    if not modules_to_process:
+        raise HTTPException(
+            status_code=400,
+            detail="No modules to process. All modules may already be processed."
+        )
+
+    # Trigger batch processing task
+    try:
+        from app.services.worker_client import celery_app
+
+        if mode == "parallel":
+            task = celery_app.send_task(
+                "process_course_batch",
+                args=[course_id, modules_to_process]
+            )
+        else:
+            task = celery_app.send_task(
+                "process_course_sequential",
+                args=[course_id, modules_to_process]
+            )
+
+        # Update module statuses
+        for module in course.modules:
+            if any(m["id"] == module.id for m in modules_to_process):
+                module.processing_status = ProcessingStatus.PROCESSING
+                module.processing_task_id = task.id
+
+        await db.commit()
+
+        return BatchProcessingResponse(
+            task_id=task.id,
+            course_id=course_id,
+            module_count=len(modules_to_process),
+            message=f"Started {mode} processing for {len(modules_to_process)} modules",
+            mode=mode,
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to start batch processing: {str(e)}"
+        )
+
+
+@router.get("/{course_id}/processing-status")
+async def get_course_processing_status(
+    course_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get processing status for all modules in a course.
+
+    Returns detailed status for each module including progress and errors.
+    """
+    result = await db.execute(
+        select(Course)
+        .options(selectinload(Course.modules))
+        .where(Course.id == course_id)
+    )
+    course = result.scalar_one_or_none()
+
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    modules_status = []
+    for module in course.modules:
+        modules_status.append({
+            "module_id": module.id,
+            "title": module.title,
+            "module_type": module.module_type.value,
+            "processing_status": module.processing_status.value,
+            "task_id": module.processing_task_id,
+            "is_processed": module.is_processed,
+            "chunk_count": module.chunk_count,
+            "concept_count": module.concept_count,
+            "processed_at": module.processed_at.isoformat() if module.processed_at else None,
+            "error": module.processing_error,
+        })
+
+    # Calculate summary
+    total = len(modules_status)
+    completed = sum(1 for m in modules_status if m["processing_status"] == "completed")
+    processing = sum(1 for m in modules_status if m["processing_status"] == "processing")
+    failed = sum(1 for m in modules_status if m["processing_status"] == "failed")
+    pending = sum(1 for m in modules_status if m["processing_status"] == "pending")
+
+    return {
+        "course_id": course_id,
+        "course_title": course.title,
+        "summary": {
+            "total": total,
+            "completed": completed,
+            "processing": processing,
+            "failed": failed,
+            "pending": pending,
+            "progress_percentage": (completed / total * 100) if total > 0 else 0,
+        },
+        "modules": modules_status,
+    }

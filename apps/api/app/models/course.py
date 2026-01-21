@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float, Text, ForeignKey, Enum
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Float, Text, ForeignKey, Enum, Table, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import enum
@@ -23,6 +23,15 @@ class ProcessingStatus(enum.Enum):
     PROCESSING = "processing"
     COMPLETED = "completed"
     FAILED = "failed"
+
+
+# Association table for module prerequisites (self-referential many-to-many)
+module_prerequisites = Table(
+    "module_prerequisites",
+    Base.metadata,
+    Column("module_id", Integer, ForeignKey("modules.id"), primary_key=True),
+    Column("prerequisite_id", Integer, ForeignKey("modules.id"), primary_key=True),
+)
 
 
 class Course(Base):
@@ -58,6 +67,7 @@ class Module(Base):
     module_type = Column(Enum(ModuleType), nullable=False)
     order = Column(Integer, nullable=False)  # Display order in course
     duration_minutes = Column(Integer)
+    difficulty = Column(Float, default=5.0)  # Difficulty rating 1-10
 
     # File storage
     file_url = Column(String)  # S3/MinIO URL
@@ -83,6 +93,15 @@ class Module(Base):
 
     # Relationships
     course = relationship("Course", back_populates="modules")
+
+    # Self-referential many-to-many for prerequisites
+    prerequisites = relationship(
+        "Module",
+        secondary=module_prerequisites,
+        primaryjoin=id == module_prerequisites.c.module_id,
+        secondaryjoin=id == module_prerequisites.c.prerequisite_id,
+        backref="dependent_modules",
+    )
 
 
 class Enrollment(Base):
