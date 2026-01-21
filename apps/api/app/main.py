@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.core.config import settings
-from app.routers import courses, modules, assessment, reviews, chat, processing, adaptive, gamification, graph
+from app.routers import courses, modules, assessment, reviews, chat, processing, adaptive, gamification, graph, social
 from app.services.graph_service import graph_service
 import logging
 
@@ -56,6 +56,7 @@ app.include_router(processing.router, prefix="/api/processing", tags=["processin
 app.include_router(adaptive.router, prefix="/api/adaptive", tags=["adaptive"])
 app.include_router(gamification.router, prefix="/api/gamification", tags=["gamification"])
 app.include_router(graph.router, prefix="/api/graph", tags=["graph"])
+app.include_router(social.router, prefix="/api/social", tags=["social"])
 
 
 @app.get("/")

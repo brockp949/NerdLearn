@@ -1,7 +1,8 @@
 """
-Celery application configuration with retry support
+Celery application configuration with retry support and beat scheduling
 """
 from celery import Celery
+from celery.schedules import crontab
 import os
 from dotenv import load_dotenv
 
@@ -21,6 +22,7 @@ app = Celery(
         "app.tasks.chunking_tasks",
         "app.tasks.graph_tasks",
         "app.tasks.batch_tasks",
+        "app.tasks.fsrs_tasks",
     ],
 )
 
@@ -66,6 +68,23 @@ app.conf.task_routes = {
     "app.tasks.video_tasks.*": {"queue": "videos"},
     "app.tasks.chunking_tasks.*": {"queue": "processing"},
     "app.tasks.graph_tasks.*": {"queue": "processing"},
+    "app.tasks.fsrs_tasks.*": {"queue": "optimization"},
+}
+
+# Celery beat schedule for periodic tasks
+app.conf.beat_schedule = {
+    # FSRS parameter optimization - runs weekly on Sunday at 3 AM UTC
+    "weekly-fsrs-optimization": {
+        "task": "scheduled_fsrs_optimization",
+        "schedule": crontab(hour=3, minute=0, day_of_week=0),
+        "options": {"queue": "optimization"},
+    },
+    # Daily maintenance tasks
+    "daily-cleanup-expired-sessions": {
+        "task": "cleanup_expired_sessions",
+        "schedule": crontab(hour=4, minute=0),
+        "options": {"queue": "maintenance"},
+    },
 }
 
 if __name__ == "__main__":

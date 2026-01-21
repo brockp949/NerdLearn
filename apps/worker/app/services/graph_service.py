@@ -1,30 +1,55 @@
 """
 Knowledge Graph Service
 Constructs and manages concept relationships in Neo4j
+
+Enhanced with NER-based concept extraction for improved accuracy.
 """
 from neo4j import GraphDatabase
-from typing import List, Dict, Any, Set
+from typing import List, Dict, Any, Set, Optional
 import re
+import logging
 from collections import Counter
 from ..config import config
+from ..processors.ner_extractor import get_concept_extractor, NERConceptExtractor
+
+logger = logging.getLogger(__name__)
 
 
 class GraphService:
-    """Manages knowledge graph in Neo4j"""
+    """Manages knowledge graph in Neo4j with NER-based concept extraction"""
 
-    def __init__(self):
+    def __init__(self, use_ner: bool = True):
+        """
+        Initialize graph service.
+
+        Args:
+            use_ner: Whether to use NER-based extraction (default True)
+        """
         self.driver = GraphDatabase.driver(
             config.NEO4J_URI,
             auth=(config.NEO4J_USER, config.NEO4J_PASSWORD),
         )
+        self.use_ner = use_ner
+        self._ner_extractor: Optional[NERConceptExtractor] = None
+
+        if use_ner:
+            try:
+                self._ner_extractor = get_concept_extractor()
+                logger.info("NER concept extractor initialized")
+            except Exception as e:
+                logger.warning(f"NER extraction unavailable, using fallback: {e}")
+                self.use_ner = False
 
     def close(self):
         """Close the database connection"""
         self.driver.close()
 
-    def extract_concepts(self, text: str, min_freq: int = 2) -> List[str]:
+    def extract_concepts(self, text: str, min_freq: int = 1) -> List[str]:
         """
-        Extract potential concepts from text using simple NLP heuristics
+        Extract potential concepts from text using NER or fallback heuristics.
+
+        Uses SpaCy-based NER extraction when available for higher accuracy
+        (targeting 92.8% F1 per research guidelines).
 
         Args:
             text: Text to analyze
@@ -33,9 +58,68 @@ class GraphService:
         Returns:
             List of concept names
         """
-        # Simple concept extraction: look for capitalized phrases (potential terms)
-        # This is a simplified version - in production, use NER or domain-specific extraction
+        # Try NER-based extraction first
+        if self.use_ner and self._ner_extractor:
+            try:
+                concepts = self._ner_extractor.extract_names(text)
+                logger.debug(f"NER extracted {len(concepts)} concepts")
+                return concepts[:50]
+            except Exception as e:
+                logger.warning(f"NER extraction failed, using fallback: {e}")
 
+        # Fallback to heuristic extraction
+        return self._extract_concepts_heuristic(text, min_freq)
+
+    def extract_concepts_with_metadata(self, text: str) -> List[Dict[str, Any]]:
+        """
+        Extract concepts with full metadata (confidence, type, spans).
+
+        Args:
+            text: Text to analyze
+
+        Returns:
+            List of concept dictionaries with metadata
+        """
+        if self.use_ner and self._ner_extractor:
+            try:
+                concepts = self._ner_extractor.extract(text)
+                return [
+                    {
+                        "name": c.name,
+                        "type": c.concept_type.value,
+                        "confidence": c.confidence,
+                        "frequency": c.frequency,
+                        "normalized": c.normalized_name,
+                    }
+                    for c in concepts
+                ]
+            except Exception as e:
+                logger.warning(f"NER extraction failed: {e}")
+
+        # Fallback - return basic metadata
+        names = self._extract_concepts_heuristic(text, min_freq=1)
+        return [
+            {
+                "name": name,
+                "type": "heuristic",
+                "confidence": 0.5,
+                "frequency": 1,
+                "normalized": name.lower(),
+            }
+            for name in names
+        ]
+
+    def _extract_concepts_heuristic(self, text: str, min_freq: int = 2) -> List[str]:
+        """
+        Fallback heuristic concept extraction.
+
+        Args:
+            text: Text to analyze
+            min_freq: Minimum frequency for a concept
+
+        Returns:
+            List of concept names
+        """
         # Find capitalized phrases (2-4 words)
         pattern = r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})\b"
         matches = re.findall(pattern, text)
@@ -50,17 +134,16 @@ class GraphService:
             if count >= min_freq and len(concept) > 3
         ]
 
-        # Also look for common technical terms (simple dictionary approach)
+        # Also look for common technical terms
         technical_terms = self._extract_technical_terms(text.lower())
 
         # Combine and deduplicate
         all_concepts = list(set(concepts + technical_terms))
 
-        return all_concepts[:50]  # Limit to top 50 concepts
+        return all_concepts[:50]
 
     def _extract_technical_terms(self, text: str) -> List[str]:
         """Extract common technical/educational terms"""
-        # Simplified term extraction - in production, use domain-specific dictionaries
         common_terms = [
             "algorithm",
             "data structure",
