@@ -45,6 +45,17 @@ from .ecd_framework import (
     ECDAssessor,
 )
 
+from .ml_evidence_rules import (
+    # Feature Engineering
+    EngagementFeatures,
+    FeatureExtractor,
+    # Neural Evidence Predictor
+    NeuralEvidencePredictor,
+    # ML Evidence Rules
+    MLEvidenceRule,
+    EnsembleEvidencePredictor,
+)
+
 __all__ = [
     # Telemetry Collector
     "TelemetryCollector",
@@ -77,4 +88,10 @@ __all__ = [
     "AssemblyModel",
     # Integrated Assessor
     "ECDAssessor",
+    # ML Evidence Rules
+    "EngagementFeatures",
+    "FeatureExtractor",
+    "NeuralEvidencePredictor",
+    "MLEvidenceRule",
+    "EnsembleEvidencePredictor",
 ]
