@@ -1,0 +1,79 @@
+groups:
+  - name: nerdlearn
+    rules:
+      # High error rate
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(http_requests_total{status_code=~"5.."}[5m]))
+          /
+          sum(rate(http_requests_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: High HTTP error rate
+          description: "Error rate is {{ $value | humanizePercentage }} over the last 5 minutes"
+
+      # High latency
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, endpoint))
+          > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: High API latency
+          description: "95th percentile latency is {{ $value | humanizeDuration }}"
+
+      # Service down
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Service is down
+          description: "{{ $labels.job }} has been down for more than 1 minute"
+
+      # High memory usage
+      - alert: HighMemoryUsage
+        expr: |
+          (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes)
+          / node_memory_MemTotal_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: High memory usage
+          description: "Memory usage is above 90%"
+
+      # Database connection pool exhausted
+      - alert: DBConnectionPoolExhausted
+        expr: db_connections > 95
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Database connection pool nearly exhausted
+          description: "Only {{ $value }} connections remaining"
+
+      # Redis connection issues
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Redis is down
+          description: "Redis has been unreachable for more than 1 minute"
+
+      # Celery queue backed up
+      - alert: CeleryQueueBacklog
+        expr: celery_queue_length > 1000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Celery queue backlog
+          description: "Queue {{ $labels.queue }} has {{ $value }} pending tasks"
