@@ -1,0 +1,38 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+rule_files:
+  - "alerts/*.yml"
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # NerdLearn API
+  - job_name: 'nerdlearn-api'
+    static_configs:
+      - targets: ['api:8000']
+    metrics_path: /metrics
+
+  # NerdLearn Worker (Celery)
+  - job_name: 'nerdlearn-worker'
+    static_configs:
+      - targets: ['worker:9999']
+
+  # Redis
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+
+  # PostgreSQL
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
