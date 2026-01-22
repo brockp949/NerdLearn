@@ -1,0 +1,481 @@
+// NerdLearn Database Schema
+// This schema represents the core data structures for the Cognitive-Adaptive Learning Platform
+
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// USER MANAGEMENT & AUTHENTICATION
+// ============================================================================
+
+enum UserRole {
+  STUDENT
+  INSTRUCTOR
+  ADMIN
+  RESEARCHER
+}
+
+model User {
+  id                String            @id @default(cuid())
+  email             String            @unique
+  username          String            @unique
+  passwordHash      String
+  role              UserRole          @default(STUDENT)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  lastLoginAt       DateTime?
+
+  // Relations
+  profile           LearnerProfile?
+  enrollments       CourseEnrollment[]
+  responses         LearningResponse[]
+  sessions          LearningSession[]
+  achievements      Achievement[]
+
+  @@index([email])
+  @@index([username])
+}
+
+// ============================================================================
+// LEARNER COGNITIVE MODEL
+// ============================================================================
+
+model LearnerProfile {
+  id                    String    @id @default(cuid())
+  userId                String    @unique
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Cognitive State Vector (stored as JSONB for flexibility)
+  // Contains embeddings representing learner's knowledge state
+  cognitiveEmbedding    Json      // Vector representation of knowledge state
+
+  // FSRS (Free Spaced Repetition Scheduler) Parameters
+  // These personalize the spacing algorithm for optimal retention
+  fsrsStability         Float     @default(2.5)    // Initial stability (S)
+  fsrsDifficulty        Float     @default(5.0)    // Difficulty modifier (D)
+  fsrsRetrievability    Float     @default(0.9)    // Target retrievability
+
+  // Metacognitive Metrics
+  avgResponseTime       Float     @default(0)      // milliseconds
+  avgAccuracy           Float     @default(0)      // 0-1
+  engagementScore       Float     @default(0)      // Derived from telemetry
+  persistenceIndex      Float     @default(0)      // Measure of grit
+
+  // Zone of Proximal Development (ZPD) State
+  currentZpdLower       Float     @default(0.35)   // Lower bound (35% success)
+  currentZpdUpper       Float     @default(0.70)   // Upper bound (70% success)
+  optimalDifficulty     Float     @default(0.50)   // Current sweet spot
+
+  // Gamification State
+  totalXP               Int       @default(0)
+  level                 Int       @default(1)
+  streakDays            Int       @default(0)
+  lastActivityDate      DateTime  @default(now())
+  freezesAvailable      Int       @default(2)      // Streak protection
+
+  // Preferences
+  preferredModality     String    @default("mixed") // visual, auditory, kinesthetic, mixed
+  dailyGoalMinutes      Int       @default(30)
+  notificationsEnabled  Boolean   @default(true)
+
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  // Relations
+  competencies          CompetencyState[]
+  scheduledItems        ScheduledItem[]
+
+  @@index([userId])
+}
+
+// ============================================================================
+// KNOWLEDGE GRAPH & COMPETENCY MODEL
+// ============================================================================
+
+// Note: The actual Knowledge Graph is stored in Neo4j for graph operations
+// This table acts as a bridge and stores PostgreSQL-specific metadata
+
+model Concept {
+  id                String    @id @default(cuid())
+  neoId             String    @unique  // Reference to Neo4j node ID
+
+  name              String
+  description       String?
+  taxonomyLevel     BloomLevel @default(REMEMBER)
+
+  // Difficulty Metrics
+  avgDifficulty     Float     @default(5.0)
+  lexicalDensity    Float?
+  conceptualDensity Float?
+
+  // Content Association
+  domain            String    // e.g., "Mathematics", "Computer Science"
+  subdomain         String?   // e.g., "Calculus", "Data Structures"
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  // Relations
+  resources         Resource[]
+  competencies      CompetencyState[]
+  prerequisites     ConceptPrerequisite[] @relation("PrerequisiteOf")
+  dependents        ConceptPrerequisite[] @relation("DependsOn")
+
+  @@index([domain, subdomain])
+  @@index([taxonomyLevel])
+}
+
+enum BloomLevel {
+  REMEMBER    // Level 1: Recall facts
+  UNDERSTAND  // Level 2: Explain ideas
+  APPLY       // Level 3: Use in new situations
+  ANALYZE     // Level 4: Draw connections
+  EVALUATE    // Level 5: Justify decisions
+  CREATE      // Level 6: Produce new work
+}
+
+model ConceptPrerequisite {
+  id              String   @id @default(cuid())
+
+  conceptId       String
+  concept         Concept  @relation("DependsOn", fields: [conceptId], references: [id], onDelete: Cascade)
+
+  prerequisiteId  String
+  prerequisite    Concept  @relation("PrerequisiteOf", fields: [prerequisiteId], references: [id], onDelete: Cascade)
+
+  weight          Float    @default(1.0)  // Strength of dependency (0-1)
+  isStrict        Boolean  @default(false) // Must be mastered before progression
+
+  @@unique([conceptId, prerequisiteId])
+  @@index([conceptId])
+  @@index([prerequisiteId])
+}
+
+// ============================================================================
+// COMPETENCY TRACKING (Evidence-Centered Design)
+// ============================================================================
+
+model CompetencyState {
+  id                String    @id @default(cuid())
+
+  learnerId         String
+  learner           LearnerProfile @relation(fields: [learnerId], references: [id], onDelete: Cascade)
+
+  conceptId         String
+  concept           Concept   @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+
+  // Bayesian Probability of Mastery
+  masteryProbability Float   @default(0.0)  // P(Mastery|Evidence)
+  confidence         Float   @default(0.0)  // Certainty of estimate
+
+  // Knowledge Tracing State
+  knowledgeState     Float   @default(0.0)  // DKT hidden state representation
+
+  // Performance Metrics
+  successRate        Float   @default(0.0)
+  totalAttempts      Int     @default(0)
+  successfulAttempts Int     @default(0)
+
+  // Temporal State
+  lastPracticed      DateTime?
+  nextReviewDue      DateTime?
+  reviewCount        Int     @default(0)
+
+  // FSRS Item-Specific Parameters
+  itemStability      Float   @default(2.5)
+  itemDifficulty     Float   @default(5.0)
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  // Relations
+  evidence           Evidence[]
+
+  @@unique([learnerId, conceptId])
+  @@index([learnerId])
+  @@index([conceptId])
+  @@index([nextReviewDue])
+}
+
+// ============================================================================
+// EVIDENCE MODEL (Stealth Assessment)
+// ============================================================================
+
+enum EvidenceType {
+  EXPLICIT_CORRECT    // Correct answer on assessment
+  EXPLICIT_INCORRECT  // Incorrect answer
+  IMPLICIT_ENGAGEMENT // Dwell time, click patterns
+  IMPLICIT_STRUGGLE   // Mouse dynamics indicating difficulty
+  IMPLICIT_MASTERY    // Smooth, confident interaction patterns
+  CODE_SUBMISSION     // Programming exercise submission
+  PEER_INTERACTION    // Forum posts, helping others
+}
+
+model Evidence {
+  id                String        @id @default(cuid())
+
+  competencyId      String
+  competency        CompetencyState @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+
+  type              EvidenceType
+  weight            Float         @default(1.0)  // Evidential strength (0-1)
+
+  // Evidence Data (flexible JSONB)
+  data              Json          // Contains type-specific evidence details
+
+  // Temporal Decay
+  timestamp         DateTime      @default(now())
+  decayRate         Float         @default(0.95) // Per-day decay factor
+
+  // Context
+  sessionId         String?
+  activityId        String?
+
+  createdAt         DateTime      @default(now())
+
+  @@index([competencyId])
+  @@index([timestamp])
+  @@index([type])
+}
+
+// ============================================================================
+// CONTENT & RESOURCES
+// ============================================================================
+
+enum ResourceType {
+  VIDEO
+  ARTICLE
+  INTERACTIVE
+  EXERCISE
+  ASSESSMENT
+  WORKED_EXAMPLE
+  SIMULATION
+}
+
+model Resource {
+  id                String        @id @default(cuid())
+
+  title             String
+  description       String?
+  type              ResourceType
+
+  // Content
+  contentUrl        String?       // External URL or internal path
+  contentData       Json?         // Embedded content (e.g., exercises)
+
+  // Metadata
+  estimatedMinutes  Int?
+  difficulty        Float         @default(5.0)
+
+  // Knowledge Graph Connection
+  conceptId         String?
+  concept           Concept?      @relation(fields: [conceptId], references: [id], onDelete: SetNull)
+
+  // Embeddings for semantic search (stored in Milvus)
+  embeddingId       String?       @unique
+
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  // Relations
+  responses         LearningResponse[]
+  scheduledItems    ScheduledItem[]
+
+  @@index([type])
+  @@index([conceptId])
+}
+
+// ============================================================================
+// SCHEDULING & SPACED REPETITION
+// ============================================================================
+
+enum ScheduleStatus {
+  PENDING
+  DUE
+  OVERDUE
+  COMPLETED
+}
+
+model ScheduledItem {
+  id                String          @id @default(cuid())
+
+  learnerId         String
+  learner           LearnerProfile  @relation(fields: [learnerId], references: [id], onDelete: Cascade)
+
+  resourceId        String
+  resource          Resource        @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  // FSRS Scheduling
+  dueDate           DateTime
+  stability         Float           // Current memory stability
+  difficulty        Float           // Item difficulty
+
+  status            ScheduleStatus  @default(PENDING)
+  priority          Int             @default(0)  // Higher = more urgent
+
+  // Interleaving Support
+  blockId           String?         // For grouped practice
+  interleavingIndex Int?            // Position in interleaved sequence
+
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  completedAt       DateTime?
+
+  @@index([learnerId, dueDate])
+  @@index([status])
+}
+
+// ============================================================================
+// LEARNING INTERACTIONS & SESSIONS
+// ============================================================================
+
+model LearningSession {
+  id                String    @id @default(cuid())
+
+  userId            String
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  startTime         DateTime  @default(now())
+  endTime           DateTime?
+  durationSeconds   Int?
+
+  // Session Metrics
+  itemsCompleted    Int       @default(0)
+  avgAccuracy       Float?
+  avgResponseTime   Float?
+
+  // Engagement Indicators
+  mouseEvents       Int       @default(0)
+  keystrokes        Int       @default(0)
+  pauseCount        Int       @default(0)
+
+  // Context
+  deviceType        String?
+  browserAgent      String?
+
+  createdAt         DateTime  @default(now())
+
+  // Relations
+  responses         LearningResponse[]
+
+  @@index([userId, startTime])
+}
+
+model LearningResponse {
+  id                String          @id @default(cuid())
+
+  userId            String
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  sessionId         String?
+  session           LearningSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  resourceId        String
+  resource          Resource        @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  // Response Data
+  isCorrect         Boolean?
+  responseData      Json            // Flexible: MCQ choice, code submission, etc.
+
+  // Timing
+  responseTime      Int?            // milliseconds
+  timestamp         DateTime        @default(now())
+
+  // Implicit Feedback (from telemetry)
+  dwellTime         Int?            // milliseconds on content before response
+  hesitationCount   Int?            // Pauses/backtracks
+  confidenceScore   Float?          // Derived from mouse dynamics
+
+  createdAt         DateTime        @default(now())
+
+  @@index([userId])
+  @@index([resourceId])
+  @@index([sessionId])
+}
+
+// ============================================================================
+// GAMIFICATION
+// ============================================================================
+
+enum AchievementType {
+  STREAK_MILESTONE
+  XP_MILESTONE
+  CONCEPT_MASTERY
+  SPEED_DEMON
+  PERFECTIONIST
+  EXPLORER
+  HELPER
+  CREATIVE_SOLUTION
+}
+
+model Achievement {
+  id                String            @id @default(cuid())
+
+  userId            String
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type              AchievementType
+  name              String
+  description       String
+  iconUrl           String?
+
+  // Variable Reward Parameters
+  xpReward          Int               @default(0)
+  rarity            Float             @default(1.0)  // 0 = common, 1 = legendary
+
+  unlockedAt        DateTime          @default(now())
+
+  @@index([userId])
+  @@index([type])
+}
+
+// ============================================================================
+// COURSES & CURRICULUM
+// ============================================================================
+
+model Course {
+  id                String              @id @default(cuid())
+
+  title             String
+  description       String?
+  domain            String
+
+  instructorId      String?
+
+  isPublished       Boolean             @default(false)
+
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  // Relations
+  enrollments       CourseEnrollment[]
+
+  @@index([domain])
+  @@index([isPublished])
+}
+
+model CourseEnrollment {
+  id                String    @id @default(cuid())
+
+  userId            String
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  courseId          String
+  course            Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  enrolledAt        DateTime  @default(now())
+  completedAt       DateTime?
+
+  progress          Float     @default(0.0)  // 0-1
+
+  @@unique([userId, courseId])
+  @@index([userId])
+  @@index([courseId])
+}
