@@ -51,4 +51,117 @@ export const adaptiveApi = {
     },
 };
 
+// =============================================================================
+// COGNITIVE API
+// =============================================================================
+
+export const cognitiveApi = {
+    // Frustration Detection
+    detectFrustration: async (data: {
+        user_id: string;
+        events: any[];
+        context?: Record<string, unknown>;
+    }) => {
+        const response = await api.post('/cognitive/frustration/detect', data);
+        return response.data;
+    },
+
+    updateBaseline: async (userId: string, events: any[]) => {
+        const response = await api.post('/cognitive/frustration/update-baseline', {
+            user_id: userId,
+            events,
+        });
+        return response.data;
+    },
+
+    // Metacognition
+    getMetacognitionPrompt: async (data: {
+        user_id: string;
+        concept_name: string;
+        timing: string;
+        context?: Record<string, unknown>;
+        force?: boolean;
+    }) => {
+        const response = await api.post('/cognitive/metacognition/prompt', data);
+        return response.data;
+    },
+
+    getConfidenceScale: async (conceptName: string, scaleType: string = 'numeric') => {
+        const response = await api.get('/cognitive/metacognition/confidence-scale', {
+            params: { concept_name: conceptName, scale_type: scaleType },
+        });
+        return response.data;
+    },
+
+    recordConfidence: async (data: {
+        user_id: string;
+        concept_id: string;
+        content_id: string;
+        confidence: number;
+        context?: string;
+    }) => {
+        const response = await api.post('/cognitive/metacognition/record-confidence', data);
+        return response.data;
+    },
+
+    analyzeExplanation: async (data: {
+        explanation_text: string;
+        concept_name: string;
+        expected_concepts?: string[];
+        common_misconceptions?: string[];
+    }) => {
+        const response = await api.post('/cognitive/metacognition/analyze-explanation', data);
+        return response.data;
+    },
+
+    // Calibration
+    calculateCalibration: async (data: {
+        user_id: string;
+        concept_id?: string;
+        time_window_hours?: number;
+    }) => {
+        const response = await api.post('/cognitive/calibration/calculate', data);
+        return response.data;
+    },
+
+    getCalibrationFeedback: async (data: {
+        user_id: string;
+        concept_id?: string;
+        time_window_hours?: number;
+    }) => {
+        const response = await api.post('/cognitive/calibration/feedback', data);
+        return response.data;
+    },
+
+    updatePerformance: async (userId: string, conceptId: string, actualPerformance: number) => {
+        const response = await api.post('/cognitive/calibration/update-performance', {
+            user_id: userId,
+            concept_id: conceptId,
+            actual_performance: actualPerformance,
+        });
+        return response.data;
+    },
+
+    // Interventions
+    decideIntervention: async (data: {
+        learner_state: any;
+        events?: any[];
+        context?: Record<string, unknown>;
+    }) => {
+        const response = await api.post('/cognitive/intervention/decide', data);
+        return response.data;
+    },
+
+    getInterventionHistory: async (userId: string) => {
+        const response = await api.get(`/cognitive/intervention/history/${userId}`);
+        return response.data;
+    },
+
+    // Profile
+    getCognitiveProfile: async (userId: string) => {
+        const response = await api.get(`/cognitive/profile/${userId}`);
+        return response.data;
+    },
+};
+
 export default api;

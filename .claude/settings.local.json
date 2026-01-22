@@ -26,7 +26,14 @@
       "Bash(DATABASE_URL=\"postgresql+asyncpg://nerdlearn:password@localhost:5432/nerdlearn\" NEO4J_URI=\"bolt://localhost:7687\" NEO4J_USER=\"neo4j\" NEO4J_PASSWORD=\"password\" REDIS_URL=\"redis://localhost:6379\" QDRANT_HOST=\"localhost\" QDRANT_PORT=\"6333\" python:*)",
       "Bash(pip install:*)",
       "Bash(claude mcp add memory -- cmd /c \"npx -y @modelcontextprotocol/server-memory\")",
-      "Bash(claude mcp add:*)"
+      "Bash(claude mcp add:*)",
+      "Bash(git merge:*)",
+      "Bash(git stash pop)",
+      "Bash(npm install)",
+      "Bash(cat:*)",
+      "Bash(npm run test:run:*)",
+      "Bash(npm run:*)",
+      "Bash(xargs -I {} sh -c 'test -f \"\"{}\"\" && head -1 \"\"{}\"\" 2>/dev/null')"
     ],
     "deny": [],
     "ask": []

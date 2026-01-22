@@ -1,0 +1,480 @@
+"""
+Shared pytest fixtures for NerdLearn API tests.
+
+This module provides:
+- Async test client for FastAPI
+- Mock database sessions (PostgreSQL)
+- Mock Neo4j driver
+- Mock OpenAI/LLM responses
+- Mock Redis client
+- Test settings overrides
+"""
+
+import os
+import sys
+
+# Set test environment BEFORE importing app modules
+os.environ["TESTING"] = "true"
+os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///:memory:"
+os.environ["NEO4J_URI"] = "bolt://localhost:7687"
+os.environ["NEO4J_USER"] = "neo4j"
+os.environ["NEO4J_PASSWORD"] = "test"
+os.environ["REDIS_URL"] = "redis://localhost:6379"
+os.environ["OPENAI_API_KEY"] = "test-api-key"
+os.environ["SECRET_KEY"] = "test-secret-key"
+os.environ["ALLOWED_ORIGINS"] = '["http://localhost:3000"]'
+
+import pytest
+from typing import AsyncGenerator, Generator
+from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import datetime
+import json
+
+# FastAPI testing
+from fastapi.testclient import TestClient
+from httpx import AsyncClient, ASGITransport
+
+# SQLAlchemy for DB mocking
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy.pool import StaticPool
+
+
+# =============================================================================
+# LAZY IMPORTS (after env vars are set)
+# =============================================================================
+
+# Import app modules AFTER environment is configured
+from app.core.config import Settings
+from app.core.database import Base, get_db
+from app.core.neo4j_db import get_neo4j
+from app.main import app
+
+
+# =============================================================================
+# TEST SETTINGS
+# =============================================================================
+
+@pytest.fixture
+def test_settings() -> Settings:
+    """Override settings for testing."""
+    return Settings(
+        DATABASE_URL="sqlite+aiosqlite:///:memory:",
+        NEO4J_URI="bolt://localhost:7687",
+        NEO4J_USER="neo4j",
+        NEO4J_PASSWORD="test",
+        REDIS_URL="redis://localhost:6379",
+        OPENAI_API_KEY="test-api-key",
+        SECRET_KEY="test-secret-key",
+        ALLOWED_ORIGINS=["http://localhost:3000"],
+    )
+
+
+# =============================================================================
+# DATABASE FIXTURES
+# =============================================================================
+
+@pytest.fixture
+async def async_db_engine():
+    """Create an in-memory SQLite engine for testing."""
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+        echo=False,
+    )
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    yield engine
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+
+    await engine.dispose()
+
+
+@pytest.fixture
+async def async_db_session(async_db_engine) -> AsyncGenerator[AsyncSession, None]:
+    """Create a test database session."""
+    async_session_factory = async_sessionmaker(
+        async_db_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+
+    async with async_session_factory() as session:
+        yield session
+        await session.rollback()
+
+
+@pytest.fixture
+def mock_db_session() -> MagicMock:
+    """Create a mock database session for unit tests."""
+    session = MagicMock(spec=AsyncSession)
+    session.commit = AsyncMock()
+    session.rollback = AsyncMock()
+    session.close = AsyncMock()
+    session.execute = AsyncMock()
+    session.add = MagicMock()
+    session.delete = MagicMock()
+    session.refresh = AsyncMock()
+    session.get = AsyncMock(return_value=None)
+    return session
+
+
+# =============================================================================
+# NEO4J FIXTURES
+# =============================================================================
+
+@pytest.fixture
+def mock_neo4j_driver() -> MagicMock:
+    """Create a mock Neo4j driver."""
+    driver = MagicMock()
+    session = MagicMock()
+
+    # Mock session context manager
+    session.__aenter__ = AsyncMock(return_value=session)
+    session.__aexit__ = AsyncMock(return_value=None)
+
+    # Mock run method
+    result = MagicMock()
+    result.data = AsyncMock(return_value=[])
+    result.single = AsyncMock(return_value=None)
+    session.run = AsyncMock(return_value=result)
+
+    driver.session = MagicMock(return_value=session)
+    driver.close = AsyncMock()
+
+    return driver
+
+
+@pytest.fixture
+def mock_neo4j_db(mock_neo4j_driver) -> MagicMock:
+    """Create a mock Neo4j database wrapper."""
+    neo4j_db = MagicMock()
+    neo4j_db.driver = mock_neo4j_driver
+    neo4j_db.connect = AsyncMock()
+    neo4j_db.close = AsyncMock()
+    neo4j_db.execute_query = AsyncMock(return_value=[])
+    return neo4j_db
+
+
+# =============================================================================
+# OPENAI/LLM FIXTURES
+# =============================================================================
+
+@pytest.fixture
+def mock_openai_client() -> MagicMock:
+    """Create a mock OpenAI client."""
+    client = MagicMock()
+
+    # Mock chat completions
+    completion = MagicMock()
+    completion.choices = [MagicMock(message=MagicMock(content="Mock LLM response"))]
+    client.chat.completions.create = AsyncMock(return_value=completion)
+
+    # Mock embeddings
+    embedding = MagicMock()
+    embedding.data = [MagicMock(embedding=[0.1] * 1536)]
+    client.embeddings.create = AsyncMock(return_value=embedding)
+
+    return client
+
+
+@pytest.fixture
+def mock_langchain_llm() -> MagicMock:
+    """Create a mock LangChain LLM."""
+    llm = MagicMock()
+    llm.invoke = AsyncMock(return_value=MagicMock(content="Mock LLM response"))
+    llm.ainvoke = AsyncMock(return_value=MagicMock(content="Mock LLM response"))
+    llm.bind = MagicMock(return_value=llm)
+    return llm
+
+
+@pytest.fixture
+def mock_llm_response():
+    """Factory fixture for creating custom LLM responses."""
+    def _create_response(content: str = "Mock response", **kwargs):
+        response = MagicMock()
+        response.content = content
+        for key, value in kwargs.items():
+            setattr(response, key, value)
+        return response
+    return _create_response
+
+
+# =============================================================================
+# REDIS FIXTURES
+# =============================================================================
+
+@pytest.fixture
+def mock_redis_client() -> MagicMock:
+    """Create a mock Redis client."""
+    redis = MagicMock()
+    redis.get = AsyncMock(return_value=None)
+    redis.set = AsyncMock(return_value=True)
+    redis.delete = AsyncMock(return_value=1)
+    redis.exists = AsyncMock(return_value=0)
+    redis.expire = AsyncMock(return_value=True)
+    redis.ttl = AsyncMock(return_value=-2)
+    redis.lpush = AsyncMock(return_value=1)
+    redis.rpop = AsyncMock(return_value=None)
+    redis.lrange = AsyncMock(return_value=[])
+    redis.hget = AsyncMock(return_value=None)
+    redis.hset = AsyncMock(return_value=1)
+    redis.hgetall = AsyncMock(return_value={})
+    redis.publish = AsyncMock(return_value=1)
+    redis.close = AsyncMock()
+    return redis
+
+
+# =============================================================================
+# HTTP CLIENT FIXTURES
+# =============================================================================
+
+@pytest.fixture
+def test_client() -> Generator[TestClient, None, None]:
+    """Create a synchronous test client for FastAPI."""
+    with TestClient(app) as client:
+        yield client
+
+
+@pytest.fixture
+async def async_client(
+    async_db_session: AsyncSession,
+    mock_neo4j_db: MagicMock,
+) -> AsyncGenerator[AsyncClient, None]:
+    """Create an async test client with mocked dependencies."""
+
+    async def override_get_db():
+        yield async_db_session
+
+    async def override_get_neo4j():
+        return mock_neo4j_db
+
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_neo4j] = override_get_neo4j
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        yield client
+
+    app.dependency_overrides.clear()
+
+
+# =============================================================================
+# TEST DATA FACTORIES
+# =============================================================================
+
+@pytest.fixture
+def user_data():
+    """Factory for creating test user data."""
+    def _create_user(
+        user_id: str = "test_user_123",
+        email: str = "test@example.com",
+        name: str = "Test User",
+    ):
+        return {
+            "id": user_id,
+            "email": email,
+            "name": name,
+            "created_at": datetime.utcnow().isoformat(),
+        }
+    return _create_user
+
+
+@pytest.fixture
+def course_data():
+    """Factory for creating test course data."""
+    def _create_course(
+        course_id: str = "course_123",
+        title: str = "Test Course",
+        description: str = "A test course description",
+    ):
+        return {
+            "id": course_id,
+            "title": title,
+            "description": description,
+            "modules": [],
+            "created_at": datetime.utcnow().isoformat(),
+        }
+    return _create_course
+
+
+@pytest.fixture
+def concept_data():
+    """Factory for creating test concept data."""
+    def _create_concept(
+        concept_id: str = "concept_123",
+        name: str = "Test Concept",
+        description: str = "A test concept",
+    ):
+        return {
+            "id": concept_id,
+            "name": name,
+            "description": description,
+            "prerequisites": [],
+            "mastery_level": 0.0,
+        }
+    return _create_concept
+
+
+@pytest.fixture
+def assessment_data():
+    """Factory for creating test assessment data."""
+    def _create_assessment(
+        assessment_id: str = "assessment_123",
+        concept_id: str = "concept_123",
+        score: float = 0.8,
+        correct: bool = True,
+    ):
+        return {
+            "id": assessment_id,
+            "concept_id": concept_id,
+            "score": score,
+            "correct": correct,
+            "response_time_ms": 5000,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+    return _create_assessment
+
+
+# =============================================================================
+# ADAPTIVE LEARNING FIXTURES
+# =============================================================================
+
+@pytest.fixture
+def fsrs_card_data():
+    """Factory for creating FSRS card test data."""
+    def _create_card(
+        stability: float = 1.0,
+        difficulty: float = 0.3,
+        due: datetime = None,
+    ):
+        return {
+            "stability": stability,
+            "difficulty": difficulty,
+            "due": due or datetime.utcnow(),
+            "elapsed_days": 0,
+            "scheduled_days": 0,
+            "reps": 0,
+            "lapses": 0,
+            "state": 0,  # New
+        }
+    return _create_card
+
+
+@pytest.fixture
+def bkt_state_data():
+    """Factory for creating BKT state test data."""
+    def _create_state(
+        p_know: float = 0.0,
+        p_learn: float = 0.1,
+        p_guess: float = 0.25,
+        p_slip: float = 0.1,
+    ):
+        return {
+            "p_know": p_know,
+            "p_learn": p_learn,
+            "p_guess": p_guess,
+            "p_slip": p_slip,
+        }
+    return _create_state
+
+
+# =============================================================================
+# AGENT FIXTURES
+# =============================================================================
+
+@pytest.fixture
+def mock_teachable_agent(mock_langchain_llm):
+    """Create a mock teachable agent."""
+    with patch("app.agents.social.teachable_agent.ChatOpenAI") as MockLLM:
+        MockLLM.return_value = mock_langchain_llm
+        from app.agents.social.teachable_agent import TeachableAgent
+        agent = TeachableAgent()
+        agent.llm = mock_langchain_llm
+        yield agent
+
+
+@pytest.fixture
+def mock_debate_agent(mock_langchain_llm):
+    """Create a mock SimClass debate agent."""
+    with patch("app.agents.social.simclass_debate.ChatOpenAI") as MockLLM:
+        MockLLM.return_value = mock_langchain_llm
+        from app.agents.social.simclass_debate import SimClassDebate
+        debate = SimClassDebate()
+        debate.llm = mock_langchain_llm
+        yield debate
+
+
+@pytest.fixture
+def mock_code_evaluator(mock_langchain_llm):
+    """Create a mock code evaluator."""
+    with patch("app.agents.social.code_evaluator.ChatOpenAI") as MockLLM:
+        MockLLM.return_value = mock_langchain_llm
+        from app.agents.social.code_evaluator import CodeEvaluator
+        evaluator = CodeEvaluator()
+        evaluator.llm = mock_langchain_llm
+        yield evaluator
+
+
+# =============================================================================
+# GRAPH SERVICE FIXTURES
+# =============================================================================
+
+@pytest.fixture
+def mock_graph_service(mock_neo4j_db):
+    """Create a mock graph service."""
+    with patch("app.services.graph_service.neo4j_db", mock_neo4j_db):
+        from app.services.graph_service import GraphService
+        service = GraphService()
+        service._driver = mock_neo4j_db.driver
+        yield service
+
+
+# =============================================================================
+# UTILITY FIXTURES
+# =============================================================================
+
+@pytest.fixture
+def json_response():
+    """Helper for parsing JSON responses."""
+    def _parse(response):
+        return response.json() if hasattr(response, "json") else json.loads(response)
+    return _parse
+
+
+@pytest.fixture(autouse=True)
+def reset_singletons():
+    """Reset singleton instances between tests."""
+    yield
+    # Reset any singleton patterns used in agents
+    from app.agents.social.teachable_agent import _teachable_agent_instance
+    from app.agents.social.simclass_debate import _simclass_instance
+    from app.agents.social.code_evaluator import _code_evaluator_instance
+
+    # Import and reset the module-level instances
+    import app.agents.social.teachable_agent as ta
+    import app.agents.social.simclass_debate as sd
+    import app.agents.social.code_evaluator as ce
+
+    ta._teachable_agent_instance = None
+    sd._simclass_instance = None
+    ce._code_evaluator_instance = None
+
+
+# =============================================================================
+# MARKERS FOR CONDITIONAL TESTS
+# =============================================================================
+
+def pytest_configure(config):
+    """Register custom markers."""
+    config.addinivalue_line("markers", "unit: Unit tests (fast, no external dependencies)")
+    config.addinivalue_line("markers", "integration: Integration tests (require mocked services)")
+    config.addinivalue_line("markers", "e2e: End-to-end tests (require running services)")
+    config.addinivalue_line("markers", "slow: Slow tests (skipped by default in CI)")
+    config.addinivalue_line("markers", "requires_api_key: Tests requiring external API keys")

@@ -1,0 +1,30 @@
+# Test dependencies for NerdLearn API
+# Install with: pip install -r requirements-test.txt
+
+# Include base requirements
+-r requirements.txt
+
+# Testing framework
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+pytest-cov>=4.1.0
+pytest-mock>=3.12.0
+pytest-xdist>=3.5.0  # Parallel test execution
+pytest-timeout>=2.2.0
+pytest-env>=1.1.0  # Environment variable handling
+
+# Async testing
+aiosqlite>=0.19.0  # In-memory SQLite for async tests
+httpx>=0.26.0  # Async HTTP client (already in base)
+
+# Mocking
+responses>=0.24.0  # Mock HTTP responses
+freezegun>=1.2.0  # Freeze time for tests
+factory-boy>=3.3.0  # Test data factories
+
+# Coverage
+coverage[toml]>=7.4.0
+
+# Code quality (optional but recommended)
+mypy>=1.8.0
+ruff>=0.1.0
