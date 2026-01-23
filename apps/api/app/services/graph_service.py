@@ -420,7 +420,10 @@ class AsyncGraphService:
             """
             records = await self.run_cypher(query, cols, {"name": name, "course_id": course_id, "community_id": cid})
             if records:
-                count += self._parse_agtype(records[0].count)
+                try:
+                    count += int(self._parse_agtype(records[0].count))
+                except (ValueError, TypeError):
+                    pass
         return count
 
     async def get_community_members(self, course_id: int, community_id: int) -> List[Dict[str, Any]]:
@@ -476,19 +479,7 @@ class AsyncGraphService:
         # 2. Capitalized Noun Chunks
         for chunk in doc.noun_chunks:
             clean_chunk = chunk.text.strip()
-            
-            # Remove leading determiners
-            words = clean_chunk.split()
-            if words[0].lower() in {'the', 'a', 'an', 'this', 'that', 'these', 'those'}:
-                if len(words) > 1:
-                    clean_chunk = " ".join(words[1:])
-                else:
-                    continue
 
-        # 3. Capitalized Noun Chunks
-        for chunk in doc.noun_chunks:
-            clean_chunk = chunk.text.strip()
-            
             # Remove leading determiners
             words = clean_chunk.split()
             if words[0].lower() in {'the', 'a', 'an', 'this', 'that', 'these', 'those'}:

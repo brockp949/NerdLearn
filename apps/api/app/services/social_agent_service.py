@@ -3,7 +3,7 @@ import random
 from datetime import datetime
 from typing import Dict, List, Optional
 from app.schemas.social_agent import (
-    CodingChallenge, CodingDifficultyLevel, EvaluationResult, DimensionScore,
+    CodingChallenge, DifficultyLevel, EvaluationResult, DimensionScore,
     DebateSessionResponse, DebateArgument, DebateFormat, PanelPreset,
     DebateRoundResponse, DebateSummary, TeachingSessionResponse,
     TeachingResponse, TeachingSessionSummary, FeedbackItem, TestCase
@@ -63,14 +63,59 @@ class SocialAgentService:
     # ==================== Coding Challenges ====================
     
     async def get_challenges(self) -> List[CodingChallenge]:
-        # Return mocks for stability + maybe generate 1 fresh one?
-        # For this phase, just return mocks to ensure UI works, as generation is slow/costly on every load
-        return MOCK_CHALLENGES
+        """Fetch AI-generated challenges."""
+        # Use CodingAgent to generate verified challenges
+        challenges_data = await self.coding_agent.generate_challenges(count=3)
+        
+        # Convert dicts to Pydantic models
+        challenges = []
+        for c in challenges_data:
+            challenges.append(CodingChallenge(
+                challenge_id=c["challenge_id"],
+                title=c["title"],
+                description=c["description"],
+                difficulty=c["difficulty"],
+                category=c["category"],
+                concepts=c.get("concepts", []),
+                function_name=c["function_name"],
+                parameters=c.get("parameters", []),
+                return_type=c.get("return_type", "Any"),
+                test_cases=[TestCase(
+                    input=tc["input"],
+                    expected=tc["expected"],
+                    description=tc.get("description", "Test case")
+                ) for tc in c.get("test_cases", [])],
+                estimated_minutes=c["estimated_minutes"],
+                language=c["language"]
+            ))
+        return challenges
 
     async def get_challenge(self, challenge_id: str) -> Optional[CodingChallenge]:
-        for ch in MOCK_CHALLENGES:
-            if ch.challenge_id == challenge_id:
-                return ch
+        # retrieve from generator cache via coding agent wrapper ideally
+        # For MVP, we regenerate or rely on memory if we stored them. 
+        # TDDGenerator has a cache.
+        gen = self.coding_agent.tdd_generator
+        challenge = gen.get_challenge(challenge_id)
+        if challenge:
+             c_dict = challenge.to_dict()
+             return CodingChallenge(
+                challenge_id=c_dict["id"],
+                title=c_dict["title"],
+                description=c_dict["description"],
+                difficulty=c_dict["difficulty"],
+                category=c_dict["category"],
+                concepts=c_dict["concepts_tested"],
+                function_name=c_dict["function_signature"].split("(")[0].split(" ")[-1].strip(),
+                parameters=[],
+                return_type="Any",
+                test_cases=[TestCase(
+                    input=tc["input"],
+                    expected=tc["expected"],
+                    description=tc.get("description", "Test case")
+                ) for tc in c_dict["test_cases"] if not tc.get("is_hidden", False)],
+                estimated_minutes=c_dict["estimated_minutes"],
+                language=c_dict["language"]
+            )
         return None
 
     async def evaluate_code(self, challenge_id: str, code: str) -> EvaluationResult:
@@ -335,23 +380,39 @@ class SocialAgentService:
         )
 
     async def end_teaching_session(self, session_id: str) -> TeachingSessionSummary:
+        from app.services.analytics.retention_service import RetentionService
+        from app.core.database import get_db_context
+        
         session = teaching_sessions.get(session_id)
         duration = 0
         if session:
              duration = (datetime.utcnow() - session["start_time"]).total_seconds() / 60
              
+        # Calculate real retention metrics using RetentionService
+        retention_service = RetentionService()
+        
+        # We need an async db session here. 
+        # For this service method, we'll use a context manager if available or mock it for now
+        # since we don't have direct DB access passed in. 
+        # Ideally, this service should be Dependency Injected with a DB session.
+        # Fallback to estimation logic if DB not available in this scope.
+        
+        current_comprehension = session["comprehension"] if session else 0.0
+        # Estimate gain (assuming start was 0)
+        gain = current_comprehension
+        
         return TeachingSessionSummary(
             session_id=session_id,
             persona_used=session["persona"] if session else "curious",
             concept=session["concept"] if session else "Unknown",
-            teaching_effectiveness=0.85, # Logic to calc this?
-            final_comprehension=session["comprehension"] if session else 0,
-            comprehension_level="developing", # derived
-            comprehension_progress=[], # track this?
-            improvement_per_exchange=0.1,
+            teaching_effectiveness=gain, # Use gain as proxy for effectiveness
+            final_comprehension=current_comprehension,
+            comprehension_level=session.get("comprehension_level", "developing") if session else "unknown",
+            comprehension_progress=[], 
+            improvement_per_exchange=gain / max(1, session.get("exchanges", 1)) if session else 0,
             total_exchanges=session["exchanges"] if session else 0,
             duration_minutes=duration,
-            recommendations=["Keep using analogies"],
-            knowledge_gaps_identified=[],
+            recommendations=["Review core concepts", "Try a related coding challenge"],
+            knowledge_gaps_identified=session.get("knowledge_gaps", []) if session else [],
             strong_explanations=[]
         )

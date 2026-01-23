@@ -110,152 +110,174 @@ async function main() {
   console.log('💡 Creating Python concepts...')
 
   const concepts = await Promise.all([
+    // [0]
     prisma.concept.create({
-      data: {
-        name: 'Python Variables',
-        description: 'Understanding variables and data storage in Python',
-        domain: 'Python',
-        taxonomyLevel: BloomLevel.REMEMBER,
-        avgDifficulty: 3.0,
-        neoId: 'c_py_vars' // Explicit ID for graph correlation if needed
-      }
+      data: { name: 'Python Variables', description: 'Variables and data storage', domain: 'Python', taxonomyLevel: BloomLevel.REMEMBER, avgDifficulty: 2.0, neoId: 'c_py_vars' }
     }),
+    // [1]
     prisma.concept.create({
-      data: {
-        name: 'Python Functions',
-        description: 'Creating and using functions in Python',
-        domain: 'Python',
-        taxonomyLevel: BloomLevel.UNDERSTAND,
-        avgDifficulty: 4.5,
-        neoId: 'c_py_funcs'
-      }
+      data: { name: 'Data Types', description: 'Strings, Integers, Booleans', domain: 'Python', taxonomyLevel: BloomLevel.UNDERSTAND, avgDifficulty: 2.5, neoId: 'c_py_types' }
     }),
+    // [2]
     prisma.concept.create({
-      data: {
-        name: 'Python Loops',
-        description: 'For loops, while loops, and iteration',
-        domain: 'Python',
-        taxonomyLevel: BloomLevel.APPLY,
-        avgDifficulty: 5.0,
-        neoId: 'c_py_loops'
-      }
+      data: { name: 'Control Flow', description: 'If, Elif, Else conditionals', domain: 'Python', taxonomyLevel: BloomLevel.APPLY, avgDifficulty: 3.5, neoId: 'c_py_control' }
     }),
+    // [3]
     prisma.concept.create({
-      data: {
-        name: 'Python Lists',
-        domain: 'Python',
-        taxonomyLevel: BloomLevel.APPLY,
-        avgDifficulty: 4.0,
-        neoId: 'c_py_lists'
-      }
+      data: { name: 'Python Loops', description: 'For and While loops', domain: 'Python', taxonomyLevel: BloomLevel.APPLY, avgDifficulty: 4.0, neoId: 'c_py_loops' }
     }),
+    // [4]
     prisma.concept.create({
-      data: {
-        name: 'Python Dictionaries',
-        domain: 'Python',
-        taxonomyLevel: BloomLevel.APPLY,
-        avgDifficulty: 4.5,
-        neoId: 'c_py_dicts'
-      }
+      data: { name: 'Python Functions', description: 'Defining and invoking functions', domain: 'Python', taxonomyLevel: BloomLevel.CREATE, avgDifficulty: 5.0, neoId: 'c_py_funcs' }
     }),
+    // [5]
     prisma.concept.create({
-      data: {
-        name: 'Control Flow',
-        domain: 'Python',
-        taxonomyLevel: BloomLevel.UNDERSTAND,
-        avgDifficulty: 3.5,
-        neoId: 'c_py_control'
-      }
+      data: { name: 'Python Lists', description: 'Ordered mutable sequences', domain: 'Python', taxonomyLevel: BloomLevel.APPLY, avgDifficulty: 3.5, neoId: 'c_py_lists' }
     }),
+    // [6]
     prisma.concept.create({
-      data: {
-        name: 'Python Recursion',
-        domain: 'Python',
-        taxonomyLevel: BloomLevel.ANALYZE,
-        avgDifficulty: 7.5,
-        neoId: 'c_py_recursion'
-      }
+      data: { name: 'Dictionaries', description: 'Key-value stores', domain: 'Python', taxonomyLevel: BloomLevel.ANALYZE, avgDifficulty: 4.5, neoId: 'c_py_dicts' }
     }),
+    // [7]
     prisma.concept.create({
-      data: {
-        name: 'Error Handling',
-        domain: 'Python',
-        taxonomyLevel: BloomLevel.APPLY,
-        avgDifficulty: 5.5,
-        neoId: 'c_py_errors'
-      }
+      data: { name: 'Error Handling', description: 'Try, Except blocks', domain: 'Python', taxonomyLevel: BloomLevel.EVALUATE, avgDifficulty: 5.5, neoId: 'c_py_errors' }
     }),
+    // [8]
     prisma.concept.create({
-      data: {
-        name: 'File I/O',
-        domain: 'Python',
-        taxonomyLevel: BloomLevel.APPLY,
-        avgDifficulty: 5.0,
-        neoId: 'c_py_fileio'
-      }
+      data: { name: 'File I/O', description: 'Reading and writing files', domain: 'Python', taxonomyLevel: BloomLevel.APPLY, avgDifficulty: 5.0, neoId: 'c_py_fileio' }
     }),
+    // [9]
     prisma.concept.create({
-      data: {
-        name: 'Python Classes',
-        domain: 'Python',
-        taxonomyLevel: BloomLevel.CREATE,
-        avgDifficulty: 6.5,
-        neoId: 'c_py_classes'
-      }
+      data: { name: 'Object-Oriented Programming', description: 'Classes and Objects', domain: 'Python', taxonomyLevel: BloomLevel.CREATE, avgDifficulty: 7.0, neoId: 'c_py_oop' }
     })
   ])
 
   console.log(`✅ Created ${concepts.length} concepts`)
 
-  // 3. Create Resources (Flashcards)
-  console.log('📝 Creating learning resources...')
+  // 3. Create Resources (Curriculum)
+  console.log('📝 Creating curriculum resources...')
 
-  // Mapping first concept 'Variables' with 3 cards
-  const c0 = concepts[0]
-  const resources = await Promise.all([
-    prisma.resource.create({
+  const curriculum = [
+    // 0: Variables
+    {
+      conceptDiff: 0, title: 'Variable Assignment', type: ResourceType.EXERCISE, diff: 2.0,
+      content: { type: 'flashcard', front: 'How do you assign the value 10 to variable x?', back: 'x = 10' }
+    },
+    {
+      conceptDiff: 0, title: 'Variable Naming Rules', type: ResourceType.EXERCISE, diff: 2.5,
+      content: { type: 'flashcard', front: 'Can a variable name start with a number?', back: 'No, it must start with a letter or underscore.' }
+    },
+    {
+      conceptDiff: 0, title: 'Reassignment', type: ResourceType.EXERCISE, diff: 2.5,
+      content: { type: 'multiple_choice', question: 'What happens if you run:\nx = 5\nx = "Hello"', options: ['Error', 'x is now "Hello"', 'x keeps value 5'], answer: 'x is now "Hello"' }
+    },
+
+    // 1: Data Types
+    {
+      conceptDiff: 1, title: 'Integer vs String', type: ResourceType.EXERCISE, diff: 2.5,
+      content: { type: 'flashcard', front: 'What is the type of "42"?', back: 'String (str)' }
+    },
+    {
+      conceptDiff: 1, title: 'Boolean Values', type: ResourceType.EXERCISE, diff: 2.5,
+      content: { type: 'multiple_choice', question: 'Which is a valid Boolean in Python?', options: ['true', 'True', 'TRUE'], answer: 'True' }
+    },
+
+    // 2: Control Flow
+    {
+      conceptDiff: 2, title: 'If Statement Syntax', type: ResourceType.EXERCISE, diff: 3.0,
+      content: { type: 'flashcard', front: 'What character MUST end an if statement line?', back: ': (Colon)' }
+    },
+    {
+      conceptDiff: 2, title: 'Elif Usage', type: ResourceType.EXERCISE, diff: 3.5,
+      content: { type: 'flashcard', front: 'When do you use "elif"?', back: 'To check another condition if the previous "if" was False.' }
+    },
+    {
+      conceptDiff: 2, title: 'Logic Operators', type: ResourceType.EXERCISE, diff: 3.5,
+      content: { type: 'multiple_choice', question: 'Which operator returns True if BOTH operands are True?', options: ['or', 'not', 'and'], answer: 'and' }
+    },
+
+    // 3: Loops
+    {
+      conceptDiff: 3, title: 'For Loop Range', type: ResourceType.EXERCISE, diff: 3.5,
+      content: { type: 'flashcard', front: 'What does range(3) produce?', back: '0, 1, 2' }
+    },
+    {
+      conceptDiff: 3, title: 'While Loop Condition', type: ResourceType.EXERCISE, diff: 4.0,
+      content: { type: 'multiple_choice', question: 'When does a while loop stop?', options: ['When condition is True', 'When condition is False', 'Never'], answer: 'When condition is False' }
+    },
+    {
+      conceptDiff: 3, title: 'Break Statement', type: ResourceType.EXERCISE, diff: 4.0,
+      content: { type: 'flashcard', front: 'What does "break" do inside a loop?', back: 'Immediately exits the loop.' }
+    },
+
+    // 4: Functions
+    {
+      conceptDiff: 4, title: 'Function Definition', type: ResourceType.EXERCISE, diff: 4.5,
+      content: { type: 'flashcard', front: 'Keyword to define a function?', back: 'def' }
+    },
+    {
+      conceptDiff: 4, title: 'Return Value', type: ResourceType.EXERCISE, diff: 4.5,
+      content: { type: 'multiple_choice', question: 'What does a function return if no "return" statement is used?', options: ['0', 'None', 'Error'], answer: 'None' }
+    },
+    {
+      conceptDiff: 4, title: 'Arguments', type: ResourceType.EXERCISE, diff: 5.0,
+      content: { type: 'flashcard', front: 'What are values passed into functions called?', back: 'Arguments (or Parameters)' }
+    },
+
+    // 5: Lists
+    {
+      conceptDiff: 5, title: 'List Indexing', type: ResourceType.EXERCISE, diff: 3.5,
+      content: { type: 'flashcard', front: 'How to access the first element of list L?', back: 'L[0]' }
+    },
+    {
+      conceptDiff: 5, title: 'List Append', type: ResourceType.EXERCISE, diff: 3.5,
+      content: { type: 'flashcard', front: 'Method to add element to end of list?', back: '.append()' }
+    },
+    {
+      conceptDiff: 5, title: 'List Slicing', type: ResourceType.EXERCISE, diff: 4.0,
+      content: { type: 'multiple_choice', question: 'What is L[1:]?', options: ['First element', 'All except first', 'Last element'], answer: 'All except first' }
+    },
+
+    // 6: Dictionaries
+    {
+      conceptDiff: 6, title: 'Dict Syntax', type: ResourceType.EXERCISE, diff: 4.5,
+      content: { type: 'flashcard', front: 'What brackets are used for dictionaries?', back: '{} (Curly braces)' }
+    },
+    {
+      conceptDiff: 6, title: 'Key Lookup', type: ResourceType.EXERCISE, diff: 4.5,
+      content: { type: 'flashcard', front: 'How to get value for key "k" in dict D?', back: 'D["k"]' }
+    },
+
+    // 9: OOP
+    {
+      conceptDiff: 9, title: 'Class Definition', type: ResourceType.EXERCISE, diff: 6.0,
+      content: { type: 'flashcard', front: 'Keyword to create a class?', back: 'class' }
+    },
+    {
+      conceptDiff: 9, title: 'The __init__ method', type: ResourceType.EXERCISE, diff: 6.5,
+      content: { type: 'flashcard', front: 'What is __init__ used for?', back: 'Initializing new objects (Constructor)' }
+    },
+    {
+      conceptDiff: 9, title: 'Self Parameter', type: ResourceType.EXERCISE, diff: 7.0,
+      content: { type: 'multiple_choice', question: 'What is the first parameter of instance methods?', options: ['this', 'self', 'me'], answer: 'self' }
+    }
+  ]
+
+  const createdResources = []
+  for (const item of curriculum) {
+    const res = await prisma.resource.create({
       data: {
-        conceptId: c0.id,
-        title: 'Variable Assignment',
-        type: ResourceType.EXERCISE,
-        contentData: {
-          type: 'flashcard',
-          front: 'What operator is used to assign a value to a variable in Python?',
-          back: '= (equals sign)',
-          content: 'A **variable** in Python is a named storage location...'
-        },
-        difficulty: 2.5
-      }
-    }),
-    prisma.resource.create({
-      data: {
-        conceptId: c0.id,
-        title: 'Dynamic Typing',
-        type: ResourceType.EXERCISE,
-        contentData: {
-          type: 'flashcard',
-          front: 'What does "dynamically typed" mean in Python?',
-          back: 'Variables can change type, and you don\'t need to declare types explicitly'
-        },
-        difficulty: 3.0
-      }
-    }),
-    prisma.resource.create({
-      data: {
-        conceptId: c0.id,
-        title: 'Variable Naming',
-        type: ResourceType.EXERCISE,
-        contentData: {
-          type: 'flashcard',
-          front: 'Can a variable name start with a number in Python?',
-          back: 'No, variable names must start with a letter or underscore'
-        },
-        difficulty: 3.5
+        conceptId: concepts[item.conceptDiff].id,
+        title: item.title,
+        type: item.type,
+        contentData: item.content,
+        difficulty: item.diff
       }
     })
-  ])
+    createdResources.push(res)
+  }
 
-  console.log(`✅ Created ${resources.length} resources`)
+  console.log(`✅ Created ${createdResources.length} resources`)
 
   // 4. Create Knowledge Graph in Postgres (Apache AGE)
   console.log('🌳 Building Knowledge Graph in AGE...')
@@ -267,14 +289,18 @@ async function main() {
     }
 
     // Create prerequisite relationships
+    // 0:Vars, 1:DataTypes, 2:Control, 3:Loops, 4:Funcs, 5:Lists, 6:Dicts, 7:Errors, 8:FileIO, 9:OOP
     const prerequisites = [
-      { from: 0, to: 1, weight: 0.8 },
-      { from: 1, to: 6, weight: 0.9 },
-      { from: 3, to: 4, weight: 0.7 },
-      { from: 5, to: 2, weight: 0.6 },
-      { from: 0, to: 5, weight: 0.7 },
-      { from: 2, to: 7, weight: 0.5 },
-      { from: 1, to: 9, weight: 0.8 },
+      { from: 0, to: 1, weight: 0.9 }, // Vars -> Types
+      { from: 1, to: 2, weight: 0.8 }, // Types -> Control
+      { from: 2, to: 3, weight: 0.8 }, // Control -> Loops
+      { from: 1, to: 5, weight: 0.7 }, // Types -> Lists
+      { from: 3, to: 5, weight: 0.6 }, // Loops -> Lists (iteration)
+      { from: 5, to: 6, weight: 0.7 }, // Lists -> Dicts
+      { from: 2, to: 4, weight: 0.9 }, // Control -> Funcs
+      { from: 4, to: 7, weight: 0.6 }, // Funcs -> Errors
+      { from: 4, to: 9, weight: 0.8 }, // Funcs -> OOP
+      { from: 6, to: 9, weight: 0.7 }, // Dicts -> OOP
     ]
 
     for (const prereq of prerequisites) {
@@ -286,38 +312,27 @@ async function main() {
     console.warn('⚠️  Graph creation failed:', error)
   }
 
-  // 5. Create Scheduled Items
+  // 5. Create Scheduled Items for Demo User
   console.log('📅 Creating scheduled items...')
   const profileId = demoUser.profile?.id
   const now = new Date()
 
   if (profileId) {
-    for (const res of resources) {
+    // Shedule first 10 items
+    for (let i = 0; i < 10 && i < createdResources.length; i++) {
+      const res = createdResources[i]
       await prisma.scheduledItem.create({
         data: {
           learnerId: profileId,
           resourceId: res.id,
           dueDate: now,
-          stability: 2.5,
+          stability: 2.0,
           difficulty: res.difficulty,
           status: ScheduleStatus.DUE
         }
       })
     }
-    console.log(`✅ Scheduled ${resources.length} items`)
-  }
-
-  // 6. Competency State
-  if (profileId) {
-    await prisma.competencyState.create({
-      data: {
-        learnerId: profileId,
-        conceptId: c0.id,
-        masteryProbability: 0.2,
-        lastPracticed: now
-      }
-    })
-    console.log('✅ Created initial competency')
+    console.log(`✅ Scheduled initial items`)
   }
 
   console.log('\n🎉 Seed completed successfully!')

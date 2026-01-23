@@ -34,6 +34,7 @@ from app.adaptive.interleaved import (
     PracticeItem,
     ConceptProficiency,
 )
+from app.services.scaffolding_service import ScaffoldingService, get_scaffolding_service, HintRequest, HintResponse
 from pydantic import BaseModel, Field
 from enum import Enum
 
@@ -1044,3 +1045,41 @@ def _get_interleaving_recommendations(stats: Dict) -> List[str]:
         recommendations.append("Good interleaving balance. Continue current approach.")
 
     return recommendations
+
+# ============== ZPD and Scaffolding Endpoints ==============
+
+class ZPDAnalysisRequest(BaseModel):
+    user_id: str
+    content_difficulty: float = Field(..., ge=0, le=1)
+    user_mastery: float = Field(..., ge=0, le=1)
+
+@router.post("/zpd/analyze")
+async def analyze_zpd_fit(
+    request: ZPDAnalysisRequest,
+    service: ScaffoldingService = Depends(get_scaffolding_service)
+):
+    """
+    Analyze if content fits within the user's Zone of Proximal Development
+    """
+    try:
+        analysis = await service.analyze_zpd_fit(
+            user_id=request.user_id,
+            content_difficulty=request.content_difficulty,
+            user_mastery=request.user_mastery
+        )
+        return analysis
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/scaffolding/hint", response_model=HintResponse)
+async def get_adaptive_hint(
+    request: HintRequest,
+    service: ScaffoldingService = Depends(get_scaffolding_service)
+):
+    """
+    Get an adaptive hint based on context and history
+    """
+    try:
+        return await service.get_adaptive_hint(request)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

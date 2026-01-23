@@ -25,3 +25,24 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
         base_url="http://test"
     ) as client:
         yield client
+
+@pytest.fixture
+def telemetry_service():
+    """Fixture for TelemetryService that resets metrics after each test"""
+    from app.core.telemetry import TelemetryService
+    service = TelemetryService()
+    yield service
+    service.reset_metrics()
+
+@pytest.fixture
+def mock_executor():
+    """Fixture for SafePythonExecutor"""
+    from unittest.mock import MagicMock
+    executor = MagicMock()
+    # mock execute return
+    executor.execute.return_value = {
+        "success": True,
+        "output": "Simulated Output",
+        "error": None
+    }
+    return executor

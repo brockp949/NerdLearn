@@ -19,6 +19,7 @@ from enum import Enum
 import math
 
 from app.core.database import get_db
+from app.services.analytics.learning_dna_service import get_learning_dna_service, LearningDNAService, DNAProfile
 
 router = APIRouter()
 
@@ -739,3 +740,17 @@ async def get_learning_funnel(
             ]
         }
     }
+
+
+# ==================== Learning DNA ====================
+
+@router.get("/dna/{user_id}", response_model=DNAProfile)
+async def get_learning_dna(
+    user_id: str,
+    service: LearningDNAService = Depends(get_learning_dna_service)
+):
+    """
+    Get the "Learning DNA" profile for a user.
+    """
+    return await service.calculate_dna(user_id)
+

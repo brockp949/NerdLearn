@@ -8,58 +8,9 @@ import logging
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.routers import courses, modules, assessment, reviews, chat, processing, adaptive, gamification, graph, social, curriculum, transformation, session
+from app.routers import courses, modules, assessment, reviews, chat, processing, adaptive, gamification, graph, curriculum, session, social, admin
 
-
-
-logger = logging.getLogger(__name__)
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Manage application lifecycle - startup and shutdown events"""
-    # Startup
-    logger.info("🚀 Starting NerdLearn API")
-    logger.info(f"Environment: {settings.ENVIRONMENT}")
-    logger.info(f"Debug mode: {settings.DEBUG}")
-
-
-
-    # Initialize Sentry if configured
-    if settings.SENTRY_DSN:
-        try:
-            import sentry_sdk
-            sentry_sdk.init(
-                dsn=settings.SENTRY_DSN,
-                environment=settings.ENVIRONMENT,
-                traces_sample_rate=0.1 if settings.ENVIRONMENT == "production" else 1.0,
-            )
-            logger.info("Sentry monitoring initialized")
-        except Exception as e:
-            logger.warning(f"Failed to initialize Sentry: {e}")
-
-    yield
-
-    # Shutdown
-    logger.info("Shutting down NerdLearn API")
-
-
-
-app = FastAPI(
-    title="NerdLearn API",
-    description="AI-Powered Adaptive Learning Platform API",
-    version="1.0.0",
-    lifespan=lifespan,
-)
-
-# CORS configuration
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# ... (imports)
 
 # Include routers
 app.include_router(courses.router, prefix="/api/courses", tags=["courses"])
@@ -73,8 +24,9 @@ app.include_router(gamification.router, prefix="/api/gamification", tags=["gamif
 app.include_router(graph.router, prefix="/api/graph", tags=["graph"])
 app.include_router(social.router, prefix="/api/social", tags=["social"])
 app.include_router(curriculum.router, prefix="/api/curriculum", tags=["curriculum"])
-app.include_router(transformation.router, prefix="/api/transformation", tags=["transformation"])
+# app.include_router(transformation.router, prefix="/api/transformation", tags=["transformation"])
 app.include_router(session.router, prefix="/api/session", tags=["session"])
+app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 
 
 @app.get("/")

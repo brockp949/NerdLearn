@@ -42,6 +42,8 @@ from app.adaptive.cognitive import (
     FrustrationIndicators,
     get_intervention_engine,
 )
+from app.schemas.cognitive import ObservationRequest, ObservationResponse
+from app.services.cognitive.observer_agent import MetacognitiveObserver, get_observer_agent
 
 logger = logging.getLogger(__name__)
 
@@ -622,3 +624,24 @@ async def get_cognitive_profile(
     except Exception as e:
         logger.error(f"Error getting profile: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# ============== Observer Agent Endpoints ==============
+
+@router.post("/observe", response_model=ObservationResponse)
+async def observe_behavior(
+    request: ObservationRequest,
+    observer: MetacognitiveObserver = Depends(get_observer_agent)
+):
+    """
+    Observer Agent: Analyze recent events for unproductive patterns.
+    Detects:
+    - Gaming the system
+    - Wheel spinning
+    """
+    try:
+        response = await observer.observe(request)
+        return response
+    except Exception as e:
+        logger.error(f"Error in observer agent: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+

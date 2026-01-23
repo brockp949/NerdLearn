@@ -85,9 +85,12 @@ class BaseAgent:
         """
         self.name = name
         self.role_description = role_description
+        from app.core.cost_tracker import CostTrackingCallback
+        
         self.llm = llm or ChatOpenAI(
             model=model,
             temperature=temperature,
+            callbacks=[CostTrackingCallback()]
         )
         
     def create_system_prompt(self) -> str:

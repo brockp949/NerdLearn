@@ -36,7 +36,7 @@ def detect_gaming(events: List[InteractionEvent], time_window_seconds: int = 60)
     short_attempts = [e for e in recent_events if e.event_type == 'answer' and (e.response_time_ms or 0) < 4000]
     if len(short_attempts) >= 3:
         return BehaviorPattern(
-            pattern_type="gaming",
+            pattern_type=BehaviorType.GAMING,
             subtype=GamingType.RAPID_GUESSING.value,
             intensity=min(1.0, len(short_attempts) * 0.2), 
             confidence=0.8,
@@ -57,7 +57,7 @@ def detect_gaming(events: List[InteractionEvent], time_window_seconds: int = 60)
                 
         if short_intervals >= 2:
              return BehaviorPattern(
-                pattern_type="gaming",
+                pattern_type=BehaviorType.GAMING,
                 subtype=GamingType.HINT_ABUSE.value,
                 intensity=0.9,
                 confidence=0.9,
@@ -101,7 +101,7 @@ def detect_wheel_spinning(events: List[InteractionEvent], max_attempts: int = 3)
             
     if consecutive_failures >= max_attempts:
          return BehaviorPattern(
-            pattern_type="wheel_spinning",
+            pattern_type=BehaviorType.WHEEL_SPINNING,
             subtype=WheelSpinningType.REPETITIVE_ERROR.value,
             intensity=min(1.0, consecutive_failures * 0.2),
             confidence=0.7,
