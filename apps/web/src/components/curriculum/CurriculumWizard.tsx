@@ -32,7 +32,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useCurriculumGeneration } from "@/hooks/use-curriculum";
-import type { DifficultyLevel, LearningStyle, ModuleData, Syllabus } from "@/types/curriculum";
+import type { CurriculumDifficulty as DifficultyLevel, LearningStyle, ModuleData, Syllabus } from "@/types/curriculum";
 
 interface CurriculumWizardProps {
   courseId?: number;
@@ -213,11 +213,10 @@ export function CurriculumWizard({ courseId = 1, onComplete }: CurriculumWizardP
             <button
               key={opt.value}
               onClick={() => setDifficulty(opt.value)}
-              className={`p-3 rounded-lg border transition-all text-left ${
-                difficulty === opt.value
+              className={`p-3 rounded-lg border transition-all text-left ${difficulty === opt.value
                   ? "border-purple-500 bg-purple-500/20"
                   : "border-white/10 hover:border-white/20"
-              }`}
+                }`}
             >
               <div className="font-medium text-white text-sm">{opt.label}</div>
               <div className="text-xs text-white/50">{opt.description}</div>
@@ -237,11 +236,10 @@ export function CurriculumWizard({ courseId = 1, onComplete }: CurriculumWizardP
             <button
               key={opt.value}
               onClick={() => setLearningStyle(opt.value)}
-              className={`p-3 rounded-lg border transition-all text-center ${
-                learningStyle === opt.value
+              className={`p-3 rounded-lg border transition-all text-center ${learningStyle === opt.value
                   ? "border-purple-500 bg-purple-500/20"
                   : "border-white/10 hover:border-white/20"
-              }`}
+                }`}
             >
               <div className="text-2xl mb-1">{opt.icon}</div>
               <div className="font-medium text-white text-sm">{opt.label}</div>
@@ -326,13 +324,12 @@ export function CurriculumWizard({ courseId = 1, onComplete }: CurriculumWizardP
           return (
             <div
               key={agent}
-              className={`flex items-center gap-3 p-3 rounded-lg transition-all ${
-                isActive
+              className={`flex items-center gap-3 p-3 rounded-lg transition-all ${isActive
                   ? "bg-purple-500/20 border border-purple-500/30"
                   : isComplete
-                  ? "bg-emerald-500/10 border border-emerald-500/20"
-                  : "bg-white/5 border border-white/10"
-              }`}
+                    ? "bg-emerald-500/10 border border-emerald-500/20"
+                    : "bg-white/5 border border-white/10"
+                }`}
             >
               {isActive ? (
                 <Loader2 className="w-5 h-5 text-purple-400 animate-spin" />
@@ -504,21 +501,19 @@ export function CurriculumWizard({ courseId = 1, onComplete }: CurriculumWizardP
           return (
             <div key={s.id} className="flex items-center flex-1">
               <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
-                  isComplete
+                className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${isComplete
                     ? "bg-purple-500 text-white"
                     : isCurrent
-                    ? "bg-purple-500/30 text-purple-300 ring-2 ring-purple-500"
-                    : "bg-white/10 text-white/40"
-                }`}
+                      ? "bg-purple-500/30 text-purple-300 ring-2 ring-purple-500"
+                      : "bg-white/10 text-white/40"
+                  }`}
               >
                 {isComplete ? <CheckCircle2 className="w-4 h-4" /> : idx + 1}
               </div>
               {idx < 3 && (
                 <div
-                  className={`flex-1 h-0.5 mx-2 ${
-                    isComplete ? "bg-purple-500" : "bg-white/10"
-                  }`}
+                  className={`flex-1 h-0.5 mx-2 ${isComplete ? "bg-purple-500" : "bg-white/10"
+                    }`}
                 />
               )}
             </div>

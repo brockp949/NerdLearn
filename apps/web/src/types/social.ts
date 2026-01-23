@@ -192,7 +192,7 @@ export interface DebateSessionState {
 // CODE EVALUATOR TYPES
 // =============================================================================
 
-export type DifficultyLevel = 'beginner' | 'intermediate' | 'advanced' | 'expert';
+export type CodingDifficultyLevel = 'beginner' | 'intermediate' | 'advanced' | 'expert';
 
 export type EvaluationDimension =
   | 'correctness'
@@ -216,7 +216,7 @@ export interface CodingChallenge {
   challenge_id: string;
   title: string;
   description: string;
-  difficulty: DifficultyLevel;
+  difficulty: CodingDifficultyLevel;
   language: string;
   function_name: string;
   parameters: { name: string; type: string }[];
@@ -231,7 +231,7 @@ export interface CreateChallengeRequest {
   challenge_id: string;
   title: string;
   description: string;
-  difficulty: DifficultyLevel;
+  difficulty: CodingDifficultyLevel;
   function_name: string;
   parameters: { name: string; type: string }[];
   return_type: string;
@@ -295,7 +295,7 @@ export interface HintResponse {
 export interface ChallengeSummary {
   challenge_id: string;
   title: string;
-  difficulty: DifficultyLevel;
+  difficulty: CodingDifficultyLevel;
   concepts: string[];
   estimated_minutes: number;
 }

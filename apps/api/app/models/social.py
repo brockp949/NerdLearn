@@ -244,7 +244,7 @@ class UserActivity(Base):
     # Activity details
     title = Column(String, nullable=False)
     description = Column(Text)
-    metadata = Column(Text)  # JSON string for flexible data
+    activity_data = Column(Text)  # JSON string for flexible data
 
     # Visibility
     is_public = Column(Boolean, default=True)

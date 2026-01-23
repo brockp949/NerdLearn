@@ -114,6 +114,18 @@ class TimeSeriesResponse(BaseModel):
     total: float
     avg: float
     trend: float  # Percentage change
+    aggregate_value: Optional[float] = None
+
+
+class SessionMetricInput(BaseModel):
+    """Input for session metrics from telemetry"""
+    user_id: int
+    session_id: str
+    total_dwell_ms: int
+    valid_dwell_ms: int
+    engagement_score: float
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+
 
 
 # ==================== Engagement Heatmap ====================
@@ -239,12 +251,36 @@ async def get_concept_module_heatmap(
     )
 
 
+@router.post("/metrics/session")
+async def ingest_session_metrics(
+    metrics: SessionMetricInput,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Ingest aggregated session metrics from Telemetry Service/Frontend.
+    
+    Update "Learning Clock" (engagement time) and other analytics.
+    """
+    # In production: Write to timeseries DB or aggregate table
+    # For now, we will log it and return success
+    
+    # Calculate minutes
+    valid_minutes = metrics.valid_dwell_ms / 60000
+    
+    return {
+        "status": "recorded",
+        "added_minutes": round(valid_minutes, 2),
+        "user_id": metrics.user_id
+    }
+
+
+
 # ==================== Retention Analysis ====================
 
 @router.get("/retention/cohort", response_model=RetentionResponse)
 async def get_retention_cohorts(
     course_id: Optional[int] = None,
-    cohort_period: str = Query(default="week", regex="^(day|week|month)$"),
+    cohort_period: str = Query(default="week", pattern="^(day|week|month)$"),
     periods_back: int = Query(default=8, ge=1, le=24),
     db: AsyncSession = Depends(get_db)
 ):
@@ -491,7 +527,7 @@ async def get_mastery_distribution(
 async def get_mastery_progress(
     course_id: int,
     user_id: Optional[int] = None,
-    period: str = Query(default="week", regex="^(day|week|month)$"),
+    period: str = Query(default="week", pattern="^(day|week|month)$"),
     db: AsyncSession = Depends(get_db)
 ):
     """

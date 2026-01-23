@@ -8,8 +8,9 @@ import logging
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.routers import courses, modules, assessment, reviews, chat, processing, adaptive, gamification, graph, social
-from app.services.graph_service import graph_service
+from app.routers import courses, modules, assessment, reviews, chat, processing, adaptive, gamification, graph, social, curriculum, transformation, session
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -22,12 +23,7 @@ async def lifespan(app: FastAPI):
     logger.info(f"Environment: {settings.ENVIRONMENT}")
     logger.info(f"Debug mode: {settings.DEBUG}")
 
-    # Initialize Neo4j connection
-    try:
-        await graph_service.connect()
-        logger.info("Neo4j connection established")
-    except Exception as e:
-        logger.warning(f"Neo4j connection failed (service may not be running): {e}")
+
 
     # Initialize Sentry if configured
     if settings.SENTRY_DSN:
@@ -46,11 +42,7 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("Shutting down NerdLearn API")
-    try:
-        await graph_service.close()
-        logger.info("Neo4j connection closed")
-    except Exception as e:
-        logger.warning(f"Error closing Neo4j connection: {e}")
+
 
 
 app = FastAPI(
@@ -80,6 +72,9 @@ app.include_router(adaptive.router, prefix="/api/adaptive", tags=["adaptive"])
 app.include_router(gamification.router, prefix="/api/gamification", tags=["gamification"])
 app.include_router(graph.router, prefix="/api/graph", tags=["graph"])
 app.include_router(social.router, prefix="/api/social", tags=["social"])
+app.include_router(curriculum.router, prefix="/api/curriculum", tags=["curriculum"])
+app.include_router(transformation.router, prefix="/api/transformation", tags=["transformation"])
+app.include_router(session.router, prefix="/api/session", tags=["session"])
 
 
 @app.get("/")

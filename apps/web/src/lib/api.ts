@@ -164,4 +164,170 @@ export const cognitiveApi = {
     },
 };
 
+// =============================================================================
+// CURRICULUM API
+// =============================================================================
+
+export const curriculumApi = {
+    generateCurriculum: async (data: any) => {
+        const response = await api.post('/curriculum/generate', data);
+        return response.data;
+    },
+
+    generateCurriculumAsync: async (data: any) => {
+        const response = await api.post('/curriculum/generate/async', data);
+        return response.data;
+    },
+
+    getJobStatus: async (jobId: string) => {
+        const response = await api.get(`/curriculum/jobs/${jobId}`);
+        return response.data;
+    },
+
+    getJobResult: async (jobId: string) => {
+        const response = await api.get(`/curriculum/jobs/${jobId}/result`);
+        return response.data;
+    },
+
+    previewArcOfLearning: async (data: any) => {
+        const response = await api.post('/curriculum/preview', data);
+        return response.data;
+    },
+};
+
+// =============================================================================
+// SOCIAL API
+// =============================================================================
+
+export const socialApi = {
+    // Coding Challenges
+    initSampleChallenges: async () => {
+        const response = await api.post('/social/challenges/init');
+        return response.data;
+    },
+    listChallenges: async () => {
+        const response = await api.get('/social/coding-challenges');
+        return response.data;
+    },
+    getChallenge: async (challengeId: string) => {
+        const response = await api.get(`/social/coding-challenges/${challengeId}`);
+        return response.data;
+    },
+    submitCode: async (data: any) => {
+        const response = await api.post('/social/challenges/evaluate', data);
+        return response.data;
+    },
+    getHint: async (data: any) => {
+        const response = await api.post('/social/challenges/hint', data);
+        return response.data;
+    },
+
+    // Debates
+    startDebate: async (data: any) => {
+        const response = await api.post('/social/debates/start', data);
+        return response.data;
+    },
+    advanceDebate: async (data: any) => {
+        const response = await api.post('/social/debates/advance', data);
+        return response.data;
+    },
+    getDebateSummary: async (sessionId: string) => {
+        const response = await api.get(`/social/debates/${sessionId}/summary`);
+        return response.data;
+    },
+
+    // Teaching
+    startTeachingSession: async (data: any) => {
+        const response = await api.post('/social/teaching/start', data);
+        return response.data;
+    },
+    submitExplanation: async (data: any) => {
+        const response = await api.post('/social/teaching/explain', data);
+        return response.data;
+    },
+    endTeachingSession: async (sessionId: string) => {
+        const response = await api.post(`/social/teaching/${sessionId}/end`);
+        return response.data;
+    },
+};
+
+// =============================================================================
+// MULTIMODAL API
+// =============================================================================
+
+export const multimodalApi = {
+    // Conceptual State
+    getConceptualState: async (userId: string, contentId: string) => {
+        const response = await api.get(`/multimodal/state/${userId}/${contentId}`);
+        return response.data;
+    },
+    resetConceptualState: async (userId: string, contentId: string) => {
+        const response = await api.post('/multimodal/state/reset', { user_id: userId, content_id: contentId });
+        return response.data;
+    },
+    getLearningSummary: async (userId: string, contentId: string) => {
+        const response = await api.get(`/multimodal/summary/${userId}/${contentId}`);
+        return response.data;
+    },
+
+    // Recommendations
+    getModalityRecommendation: async (data: { user_id: string; content_id: string }) => {
+        const response = await api.post('/multimodal/recommend', data);
+        return response.data;
+    },
+
+    // Generation / Morphing
+    morphContent: async (data: {
+        content: string;
+        source_modality: string;
+        target_modality: string;
+        user_id?: string;
+        content_id?: string;
+        options?: any;
+    }) => {
+        const response = await api.post('/multimodal/morph', data);
+        return response.data;
+    },
+
+    generatePodcast: async (data: {
+        content: string;
+        topic: string;
+        duration_minutes?: number;
+        style?: string;
+    }) => {
+        const response = await api.post('/multimodal/generate/podcast', data);
+        return response.data;
+    },
+
+    generateDiagram: async (data: {
+        content: string;
+        diagram_type?: string;
+        title?: string;
+        focus_concepts?: string[];
+    }) => {
+        const response = await api.post('/multimodal/generate/diagram', data);
+        return response.data;
+    },
+
+    generateDiagramFromConcepts: async (data: {
+        concepts: string[];
+        relation_type?: string;
+        title?: string;
+    }) => {
+        const response = await api.post('/multimodal/generate/diagram-from-concepts', data);
+        return response.data;
+    },
+
+    // Metadata
+    getSupportedModalities: async () => {
+        const response = await api.get('/multimodal/modalities');
+        return response.data;
+    },
+
+    getDiagramTypes: async () => {
+        const response = await api.get('/multimodal/diagram-types');
+        return response.data;
+    },
+};
+
 export default api;

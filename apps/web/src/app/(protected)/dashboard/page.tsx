@@ -69,9 +69,9 @@ const generateMockInsights = (): LearningInsights => ({
   averageSessionLength: 22,
   topConcepts: ['Variables', 'Functions', 'Control Flow'],
   weakConcepts: ['Recursion', 'Error Handling'],
-  recommendation: 'Based on your progress, we recommend a 20-minute session focusing on Recursion. Your prerequisites are solid, so you're ready to tackle this concept.',
-  streakMessage: 'Great job! You're on a 12-day streak. Keep it going to reach your longest streak of 15 days!',
-  motivationalMessage: 'The expert in anything was once a beginner. Every card you review brings you closer to mastery.'
+  recommendation: "Based on your progress, we recommend a 20-minute session focusing on Recursion. Your prerequisites are solid, so you're ready to tackle this concept.",
+  streakMessage: "Great job! You're on a 12-day streak. Keep it going to reach your longest streak of 15 days!",
+  motivationalMessage: "The expert in anything was once a beginner. Every card you review brings you closer to mastery."
 })
 
 export default function DashboardPage() {

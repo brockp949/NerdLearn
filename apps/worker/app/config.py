@@ -11,11 +11,7 @@ class Config:
     # Database URLs
     DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://nerdlearn:password@localhost:5432/nerdlearn")
     REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-    NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
-    NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
-    NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "password")
-    QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
-    QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
+
 
     # MinIO/S3 Configuration
     MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "localhost:9000")

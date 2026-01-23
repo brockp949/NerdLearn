@@ -21,7 +21,7 @@ export type BehavioralSignal =
 
 export interface InteractionEvent {
   timestamp?: string;
-  event_type: 'answer' | 'click' | 'navigation' | 'hint' | 'pause';
+  event_type: 'answer' | 'answer_submitted' | 'click' | 'navigation' | 'hint' | 'pause';
   correct?: boolean;
   response_time_ms?: number;
   content_id?: string;

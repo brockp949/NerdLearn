@@ -3,7 +3,7 @@ Production configuration settings
 """
 import os
 from typing import List
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -24,17 +24,10 @@ class Settings(BaseSettings):
     # Redis
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379")
 
-    # Neo4j
-    NEO4J_URI: str = os.getenv("NEO4J_URI", "bolt://localhost:7687")
-    NEO4J_USER: str = os.getenv("NEO4J_USER", "neo4j")
-    NEO4J_PASSWORD: str = os.getenv("NEO4J_PASSWORD", "password")
-
-    # Qdrant
-    QDRANT_HOST: str = os.getenv("QDRANT_HOST", "localhost")
-    QDRANT_PORT: int = int(os.getenv("QDRANT_PORT", "6333"))
-    QDRANT_COLLECTION: str = "course_chunks"
+    # Vector Embeddings
     VECTOR_SIZE: int = 1536
     EMBEDDING_MODEL: str = "text-embedding-3-small"
+
 
     # MinIO / S3
     MINIO_ENDPOINT: str = os.getenv("MINIO_ENDPOINT", "localhost:9000")
@@ -69,9 +62,11 @@ class Settings(BaseSettings):
     SENTRY_DSN: str = os.getenv("SENTRY_DSN", "")
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=True,
+        extra="ignore"
+    )
 
 
 settings = Settings()

@@ -11,6 +11,8 @@ from app.models.social import (
     Leaderboard,
     UserActivity,
 )
+from app.models.gamification import UserAchievement
+from app.models.vector_store import CourseChunk
 
 __all__ = [
     "User",
@@ -28,4 +30,6 @@ __all__ = [
     "GroupMessage",
     "Leaderboard",
     "UserActivity",
+    "UserAchievement",
+    "CourseChunk",
 ]

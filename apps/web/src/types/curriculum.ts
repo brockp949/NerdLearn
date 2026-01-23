@@ -6,7 +6,7 @@
 
 // ============== Curriculum Generation ==============
 
-export type DifficultyLevel = 'beginner' | 'intermediate' | 'advanced';
+export type CurriculumDifficulty = 'beginner' | 'intermediate' | 'advanced';
 export type LearningStyle = 'visual' | 'text' | 'interactive' | 'balanced';
 export type JobStatus = 'pending' | 'running' | 'completed' | 'failed';
 
@@ -14,7 +14,7 @@ export interface CurriculumGenerationRequest {
   topic: string;
   course_id: number;
   duration_weeks?: number;
-  difficulty_level?: DifficultyLevel;
+  difficulty_level?: CurriculumDifficulty;
   target_audience?: string;
   prerequisites?: string[];
   learning_style?: LearningStyle;

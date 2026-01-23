@@ -79,6 +79,7 @@ class RAGChatEngine:
     ) -> List[Citation]:
         """
         Retrieve relevant context from vector store with optional HyDE expansion
+        Also retrieves Community Summaries for high-level context (Global Search)
         """
         search_query = query
         
@@ -88,20 +89,43 @@ class RAGChatEngine:
             # Combine original query with hypothetical doc for expansion
             search_query = f"{query}\n{hypothetical_doc}"
 
-        # Search vector store
-        results = vector_store_service.search(
+        # 1. Search Standard Chunks
+        chunk_results = await vector_store_service.search(
             query=search_query,
             course_id=course_id,
             module_id=module_id,
             limit=top_k,
         )
 
+        # 2. Search Community Summaries (Global Search)
+        # We search specifically for summaries that match the query
+        summary_results = await vector_store_service.search_summaries(
+            query=search_query,
+            course_id=course_id,
+            limit=2 
+        )
+
+        # Combine results
+        # Prioritize chunks, but include summaries if their score is comparable
+        combined_results = chunk_results + summary_results
+        
+        # Deduplicate by ID
+        seen_ids = set()
+        unique_results = []
+        for r in combined_results:
+            if r["id"] not in seen_ids:
+                unique_results.append(r)
+                seen_ids.add(r["id"])
+        
+        # Sort by score desc
+        unique_results.sort(key=lambda x: x["score"], reverse=True)
+
         # Convert to citations
         citations = []
-        for result in results:
+        for result in unique_results:
             citation = Citation(
-                module_id=result["module_id"],
-                module_title=result.get("module_title", f"Module {result['module_id']}"),
+                module_id=result.get("module_id") or 0,
+                module_title=result.get("module_title") or f"Module {result.get('module_id')}",
                 module_type=result.get("module_type", "unknown"),
                 chunk_text=result["text"],
                 page_number=result.get("page_number"),
@@ -205,7 +229,7 @@ Answer:"""
             ChatMessage with response and citations
         """
         # Retrieve relevant context
-        citations = self.retrieve_context(
+        citations = await self.retrieve_context(
             query, course_id, vector_store_service, module_id=module_id
         )
 

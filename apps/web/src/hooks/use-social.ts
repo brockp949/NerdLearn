@@ -19,7 +19,7 @@ import type {
   DebateSessionResponse,
   DebateRoundResponse,
   DebateSummary,
-  DifficultyLevel,
+  CodingDifficultyLevel as DifficultyLevel,
   HintLevel,
   CodingChallenge,
   EvaluationResult,

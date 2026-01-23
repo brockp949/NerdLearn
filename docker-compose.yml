@@ -1,56 +1,23 @@
 version: '3.8'
 
 services:
-  # PostgreSQL - User/Course metadata
+  # PostgreSQL - Unified Database (Metadata, Graph, Vectors)
   postgres:
-    image: postgres:16-alpine
+    build:
+      context: ./services/postgres
+      dockerfile: Dockerfile
     container_name: nerdlearn-postgres
     environment:
       POSTGRES_USER: nerdlearn
       POSTGRES_PASSWORD: password
       POSTGRES_DB: nerdlearn
+    command: postgres -c 'shared_preload_libraries=age' -c 'search_path=ag_catalog,"$user",public'
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U nerdlearn" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # Neo4j - Knowledge Graphs
-  neo4j:
-    image: neo4j:5.15-community
-    container_name: nerdlearn-neo4j
-    environment:
-      NEO4J_AUTH: neo4j/password
-      NEO4J_PLUGINS: '["apoc", "graph-data-science"]'
-      NEO4J_dbms_security_procedures_unrestricted: apoc.*,gds.*
-      NEO4J_dbms_memory_heap_max__size: 2G
-    ports:
-      - "7474:7474" # HTTP
-      - "7687:7687" # Bolt
-    volumes:
-      - neo4j_data:/data
-      - neo4j_logs:/logs
-    healthcheck:
-      test: [ "CMD-SHELL", "cypher-shell -u neo4j -p password 'RETURN 1'" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # Qdrant - Vector Embeddings
-  qdrant:
-    image: qdrant/qdrant:v1.7.4
-    container_name: nerdlearn-qdrant
-    ports:
-      - "6333:6333" # REST API
-      - "6334:6334" # gRPC
-    volumes:
-      - qdrant_data:/qdrant/storage
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:6333/health" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -97,12 +64,7 @@ services:
     container_name: nerdlearn-api
     environment:
       DATABASE_URL: postgresql+asyncpg://nerdlearn:password@postgres:5432/nerdlearn
-      NEO4J_URI: bolt://neo4j:7687
-      NEO4J_USER: neo4j
-      NEO4J_PASSWORD: password
       REDIS_URL: redis://redis:6379
-      QDRANT_HOST: qdrant
-      QDRANT_PORT: 6333
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
@@ -111,11 +73,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      neo4j:
-        condition: service_healthy
       redis:
-        condition: service_healthy
-      qdrant:
         condition: service_healthy
       minio:
         condition: service_healthy
@@ -132,11 +90,6 @@ services:
     environment:
       DATABASE_URL: postgresql://nerdlearn:password@postgres:5432/nerdlearn
       REDIS_URL: redis://redis:6379/0
-      NEO4J_URI: bolt://neo4j:7687
-      NEO4J_USER: neo4j
-      NEO4J_PASSWORD: password
-      QDRANT_HOST: qdrant
-      QDRANT_PORT: 6333
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
@@ -147,16 +100,12 @@ services:
       CHUNK_OVERLAP: 50
       EMBEDDING_MODEL: text-embedding-3-small
       WHISPER_MODEL: base
-      COLLECTION_NAME: course_chunks
       VECTOR_SIZE: 1536
+      ENABLE_HEAVY_NLP: "true"
     depends_on:
       postgres:
         condition: service_healthy
-      neo4j:
-        condition: service_healthy
       redis:
-        condition: service_healthy
-      qdrant:
         condition: service_healthy
       minio:
         condition: service_healthy
@@ -172,7 +121,8 @@ services:
     container_name: nerdlearn-web
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
-      API_URL: http://api:8000  # For server-side rewrites
+      NEXT_PUBLIC_TELEMETRY_URL: ws://localhost:8002
+      API_URL: http://api:8000 # For server-side rewrites
     ports:
       - "3001:3000"
     depends_on:
@@ -183,11 +133,95 @@ services:
       - /app/.next
     command: npm run dev
 
+  # Telemetry Service - Real-time Behavioral Analytics
+  telemetry:
+    build:
+      context: ./services/telemetry
+      dockerfile: Dockerfile
+    container_name: nerdlearn-telemetry
+    environment:
+      REDIS_URL: redis://redis:6379/1
+    ports:
+      - "8002:8002"
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./services/telemetry:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8002 --reload
+
+  # Orchestrator Service - Learning Flow Controller
+  orchestrator:
+    build:
+      context: ./services/orchestrator
+      dockerfile: Dockerfile
+    container_name: nerdlearn-orchestrator
+    environment:
+      DATABASE_URL: postgresql://nerdlearn:password@postgres:5432/nerdlearn
+      SCHEDULER_URL: http://scheduler:8000
+      TELEMETRY_URL: http://telemetry:8002
+      INFERENCE_URL: http://inference:8000
+      CONTENT_URL: http://content:8000
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8005:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./services/orchestrator:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Scheduler Service - Spaced Repetition Engine
+  scheduler:
+    build:
+      context: ./services/scheduler
+      dockerfile: Dockerfile
+    container_name: nerdlearn-scheduler
+    environment:
+      DATABASE_URL: postgresql://nerdlearn:password@postgres:5432/nerdlearn
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./services/scheduler:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Inference Service - Knowledge Tracing (BKT/DKT)
+  inference:
+    build:
+      context: ./services/inference
+      dockerfile: Dockerfile
+    container_name: nerdlearn-inference
+    environment:
+      DATABASE_URL: postgresql://nerdlearn:password@postgres:5432/nerdlearn
+    ports:
+      - "8003:8000"
+    volumes:
+      - ./services/inference:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Content Service - Ingestion and Management
+  content:
+    build:
+      context: ./services/content-ingestion
+      dockerfile: Dockerfile
+    container_name: nerdlearn-content
+    environment:
+      DATABASE_URL: postgresql://nerdlearn:password@postgres:5432/nerdlearn
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+    ports:
+      - "8004:8000"
+    volumes:
+      - ./services/content-ingestion:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
 volumes:
   postgres_data:
-  neo4j_data:
-  neo4j_logs:
-  qdrant_data:
   redis_data:
   minio_data:
 

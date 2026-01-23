@@ -103,4 +103,4 @@ class Concept(Base):
 
     # Relationships
     course = relationship("Course")
-    user_mastery = relationship("UserConceptMastery", back_populates="concept")
+    # user_mastery = relationship("UserConceptMastery", back_populates="concept")

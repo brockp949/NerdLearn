@@ -10,6 +10,7 @@ from datetime import datetime
 from enum import Enum
 import redis.asyncio as redis
 import json
+import os
 
 from scheduler import FSRSScheduler, ReviewCard, ReviewRating, FSRSParameters
 
@@ -78,8 +79,9 @@ async def get_redis() -> redis.Redis:
     """Get Redis connection"""
     global redis_client
     if redis_client is None:
+        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
         redis_client = await redis.from_url(
-            "redis://localhost:6379",
+            redis_url,
             encoding="utf-8",
             decode_responses=True
         )
@@ -325,8 +327,9 @@ async def reset_card(
 async def startup_event():
     """Initialize connections on startup"""
     global redis_client
+    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
     redis_client = await redis.from_url(
-        "redis://localhost:6379",
+        redis_url,
         encoding="utf-8",
         decode_responses=True
     )

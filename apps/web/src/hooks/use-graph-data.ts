@@ -10,11 +10,30 @@ export function useGraphData() {
     useEffect(() => {
         const fetchGraph = async () => {
             try {
-                const response = await graphApi.getGraph();
-                // Ensure we have a valid structure
+                // Use the new endpoint which returns 'edges'
+                const response = await graphApi.getCourseGraph(1);
+
+                // Map API 'edges' to 'links' for frontend compatibility
+                const links = (response.edges || []).map((edge: any) => ({
+                    source: edge.source,
+                    target: edge.target,
+                    type: edge.type,
+                    confidence: edge.confidence
+                }));
+
+                // Map API nodes to UI structure
+                const nodes = (response.nodes || []).map((node: any) => ({
+                    ...node,
+                    name: node.label,
+                    domain: node.module || 'General',
+                    mastery: 0,
+                    cardsReviewed: 0,
+                    totalCards: 0
+                }));
+
                 setData({
-                    nodes: response.nodes || [],
-                    links: response.links || []
+                    nodes: nodes,
+                    links: links
                 });
             } catch (err) {
                 console.error("Failed to fetch graph", err);

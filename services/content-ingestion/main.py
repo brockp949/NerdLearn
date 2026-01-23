@@ -609,11 +609,12 @@ difficulty_scorer = DifficultyScorer()
 bloom_classifier = BloomClassifier()
 pdf_processor = PDFProcessor()
 
-# Neo4j connection
-NEO4J_URI = "bolt://localhost:7687"
-NEO4J_USER = "neo4j"
-NEO4J_PASSWORD = "nerdlearn_dev_password"
-neo4j_driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
+# Neo4j connection (Disabled for AGE migration)
+# NEO4J_URI = "bolt://localhost:7687"
+# NEO4J_USER = "neo4j" 
+# NEO4J_PASSWORD = "nerdlearn_dev_password"
+# neo4j_driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
+neo4j_driver = None
 
 
 @app.get("/")
@@ -751,6 +752,10 @@ async def build_knowledge_graph(
     """
 
     def _build_graph():
+        if not neo4j_driver:
+            print("⚠️ Graph construction skipped: Neo4j driver not initialized (AGE migration pending)")
+            return
+
         with neo4j_driver.session() as session:
             # Create concepts
             for concept in analysis.concepts[:50]:  # Limit to top 50

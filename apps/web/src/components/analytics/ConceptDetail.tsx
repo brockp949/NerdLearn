@@ -135,7 +135,7 @@ export function ConceptDetail({ concept, prerequisites = [], dependents = [], on
                 <div key={idx} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
                   <div
                     className="w-3 h-3 rounded-full flex-shrink-0"
-                    style={{ backgroundColor: prereq.color || getProgressColor(prereq.mastery) }}
+                    style={{ backgroundColor: getProgressColor(prereq.mastery) }}
                   />
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-gray-900 truncate">{prereq.name}</div>
@@ -167,7 +167,7 @@ export function ConceptDetail({ concept, prerequisites = [], dependents = [], on
                 <div key={idx} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
                   <div
                     className="w-3 h-3 rounded-full flex-shrink-0"
-                    style={{ backgroundColor: dependent.color || getProgressColor(dependent.mastery) }}
+                    style={{ backgroundColor: getProgressColor(dependent.mastery) }}
                   />
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-gray-900 truncate">{dependent.name}</div>
@@ -196,12 +196,12 @@ export function ConceptDetail({ concept, prerequisites = [], dependents = [], on
             {concept.mastery >= 0.8
               ? `Excellent work! You've mastered ${concept.name}. ${dependents.length > 0 ? `Consider moving on to ${dependents[0].name}.` : 'Keep up the great work!'}`
               : concept.mastery >= 0.6
-              ? `You're doing well with ${concept.name}. A few more reviews will help solidify your understanding.`
-              : concept.mastery >= 0.4
-              ? `Keep practicing ${concept.name}. Focus on the cards you find challenging.`
-              : concept.mastery > 0
-              ? `${concept.name} needs more attention. ${prerequisites.length > 0 && prerequisites.some(p => p.mastery < 0.6) ? `Consider reviewing the prerequisites first: ${prerequisites.filter(p => p.mastery < 0.6).map(p => p.name).join(', ')}.` : 'Take your time and review the fundamentals.'}`
-              : `Ready to start learning ${concept.name}? ${prerequisites.length > 0 ? `Make sure you're comfortable with: ${prerequisites.map(p => p.name).join(', ')}.` : 'Begin with the first few cards to build a foundation.'}`
+                ? `You're doing well with ${concept.name}. A few more reviews will help solidify your understanding.`
+                : concept.mastery >= 0.4
+                  ? `Keep practicing ${concept.name}. Focus on the cards you find challenging.`
+                  : concept.mastery > 0
+                    ? `${concept.name} needs more attention. ${prerequisites.length > 0 && prerequisites.some(p => p.mastery < 0.6) ? `Consider reviewing the prerequisites first: ${prerequisites.filter(p => p.mastery < 0.6).map(p => p.name).join(', ')}.` : 'Take your time and review the fundamentals.'}`
+                    : `Ready to start learning ${concept.name}? ${prerequisites.length > 0 ? `Make sure you're comfortable with: ${prerequisites.map(p => p.name).join(', ')}.` : 'Begin with the first few cards to build a foundation.'}`
             }
           </p>
         </div>

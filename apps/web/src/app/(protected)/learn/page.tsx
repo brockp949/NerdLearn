@@ -2,14 +2,19 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute'
-import { useAuth } from '@/lib/auth-context'
+import { useAuth, getAccessToken } from '@/lib/auth-context'
 import { ContentViewer } from '@/components/learning/ContentViewer'
 import { QuestionCard, LearningCard, Rating } from '@/components/learning/QuestionCard'
 import { ScaffoldingPanel } from '@/components/learning/ScaffoldingPanel'
 import { LearningStats } from '@/components/learning/LearningStats'
 import { EngagementMeter } from '@/components/learning/EngagementMeter'
-import { TelemetryClient, EngagementScore } from '@/lib/telemetry'
+import { TelemetryTracker, AffectState, FrustrationIndex } from '@/lib/telemetry-tracker'
 import Link from 'next/link'
+import { SplitScreenLayout } from '@/components/learning/split-screen'
+import { SidebarTabs } from '@/components/learning/SidebarTabs'
+import { ChatInterface } from '@/components/chat/chat-interface'
+import { KnowledgeGraphView } from '@/components/analytics/KnowledgeGraphView'
+import { useGraphData } from '@/hooks/use-graph-data'
 
 interface SessionState {
   session_id: string
@@ -41,17 +46,19 @@ interface AnswerResponse {
 type ViewMode = 'idle' | 'content' | 'question' | 'completed'
 
 export default function LearnPage() {
-  const { user, getAccessToken } = useAuth()
+  const { user } = useAuth()
   const [session, setSession] = useState<SessionState | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>('idle')
+  const { data: graphData, loading: graphLoading } = useGraphData()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [lastResponse, setLastResponse] = useState<AnswerResponse | null>(null)
   const [dwellStartTime, setDwellStartTime] = useState<number>(0)
 
   // Telemetry state
-  const [telemetryClient, setTelemetryClient] = useState<TelemetryClient | null>(null)
-  const [engagement, setEngagement] = useState<EngagementScore | null>(null)
+  const [telemetryClient, setTelemetryClient] = useState<TelemetryTracker | null>(null)
+  const [affectState, setAffectState] = useState<AffectState>('neutral')
+  const [frustrationIndex, setFrustrationIndex] = useState<FrustrationIndex | null>(null)
   const [telemetryConnected, setTelemetryConnected] = useState(false)
   const [hesitationCount, setHesitationCount] = useState(0)
 
@@ -84,18 +91,24 @@ export default function LearnPage() {
       setDwellStartTime(Date.now())
 
       // Initialize telemetry
-      const client = new TelemetryClient({
-        sessionId: data.session_id,
-        learnerId: user?.id || 'demo_user',
-        telemetryUrl: process.env.NEXT_PUBLIC_TELEMETRY_URL || 'ws://localhost:8002/ws',
-        throttleMs: 50
+      // Initialize telemetry
+      const client = new TelemetryTracker({
+        apiEndpoint: process.env.NEXT_PUBLIC_TELEMETRY_URL || 'http://localhost:8002/api/telemetry',
+        batchSize: 50
       })
 
-      client.onEngagement(setEngagement)
-      client.onConnection(setTelemetryConnected)
-      client.connect()
+      // client.onEngagement(setEngagement) // Tracker handles this differently now, adapt or remove
+      // client.onConnection(setTelemetryConnected) // Tracker manages its own connection state implicitly
+      client.init(user?.id ? parseInt(user.id) : 0) // Initialize
 
       setTelemetryClient(client)
+
+      // Subscribe to affect changes
+      client.onAffectChange((state) => {
+        setAffectState(state)
+        setFrustrationIndex(client.getFrustrationIndex())
+      })
+
     } catch (err: any) {
       setError(err.message || 'Failed to start learning session')
     } finally {
@@ -107,31 +120,25 @@ export default function LearnPage() {
   useEffect(() => {
     return () => {
       if (telemetryClient) {
-        telemetryClient.disconnect()
+        telemetryClient.destroy()
       }
     }
   }, [telemetryClient])
 
-  // Mouse tracking
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (telemetryClient && telemetryClient.isConnected()) {
-      telemetryClient.trackMouseMove({ clientX: e.clientX, clientY: e.clientY })
-    }
-  }, [telemetryClient])
+  // Mouse tracking is now handled internally by TelemetryTracker
+  // We don't need to manually forward mouse events
 
-  useEffect(() => {
-    if (viewMode !== 'idle' && viewMode !== 'completed') {
-      window.addEventListener('mousemove', handleMouseMove as any)
-      return () => window.removeEventListener('mousemove', handleMouseMove as any)
-    }
-  }, [viewMode, handleMouseMove])
+  // Mouse event listener management is handled by TelemetryTracker
 
   const handleContentContinue = () => {
     // Track content dwell time
     const dwellTime = Date.now() - dwellStartTime
     if (telemetryClient && session?.current_card) {
-      telemetryClient.trackDwellTime(session.current_card.card_id, dwellTime)
-      telemetryClient.trackInteraction(session.current_card.card_id, 'content_read', { dwell_time_ms: dwellTime })
+      telemetryClient.trackEvent('content_interaction', {
+        eventId: 'dwell_time',
+        cardId: session.current_card.card_id,
+        duration: dwellTime
+      })
     }
 
     setViewMode('question')
@@ -147,15 +154,13 @@ export default function LearnPage() {
 
     // Track interaction
     if (telemetryClient) {
-      telemetryClient.trackInteraction(session.current_card.card_id, 'answer_submitted', {
+      telemetryClient.trackEvent('content_interaction', {
+        eventId: 'answer_submitted',
+        cardId: session.current_card.card_id,
         rating,
-        dwell_time_ms: dwellTime,
-        hesitation_count: hesitationCount
+        dwellTime,
+        hesitationCount
       })
-
-      if (hesitationCount > 0) {
-        telemetryClient.trackHesitation(session.current_card.card_id, hesitationCount)
-      }
     }
 
     try {
@@ -226,9 +231,9 @@ export default function LearnPage() {
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-pink-50">
+      <div className="h-screen flex flex-col bg-gray-50 overflow-hidden">
         {/* Header */}
-        <header className="bg-white shadow-sm">
+        <header className="bg-white shadow-sm z-10 flex-shrink-0">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
             <div className="flex items-center space-x-4">
               <Link href="/dashboard" className="text-2xl">🧠</Link>
@@ -243,38 +248,92 @@ export default function LearnPage() {
         </header>
 
         {/* Main Content */}
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {error && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+        {error && (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 w-full">
+            <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
               <p className="text-sm text-red-800">{error}</p>
             </div>
-          )}
+          </div>
+        )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Main Learning Area */}
-            <div className="lg:col-span-2 space-y-6">
-              {/* Idle State - Start Session */}
-              {viewMode === 'idle' && (
-                <div className="bg-white rounded-lg shadow-lg p-12 text-center">
-                  <span className="text-6xl mb-4 block">🎓</span>
-                  <h2 className="text-3xl font-bold text-gray-900 mb-4">
-                    Ready to Learn?
-                  </h2>
-                  <p className="text-gray-600 mb-8 max-w-md mx-auto">
-                    Start your adaptive learning session. We'll personalize the experience to keep you in the optimal learning zone.
-                  </p>
-                  <button
-                    onClick={startSession}
-                    disabled={loading}
-                    className="px-8 py-4 bg-gradient-to-r from-purple-600 to-blue-600 text-white font-semibold rounded-lg hover:from-purple-700 hover:to-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
-                  >
-                    {loading ? 'Starting...' : 'Start Learning Session'}
-                  </button>
-                </div>
-              )}
+        {(viewMode === 'content' || viewMode === 'question') && session ? (
+          <SplitScreenLayout
+            sidebar={
+              <SidebarTabs
+                chatContent={<ChatInterface className="h-full w-full border-none shadow-none rounded-none" />}
+                graphContent={<div className="h-full w-full overflow-hidden flex flex-col"><KnowledgeGraphView data={graphData} height={600} /></div>}
+                progressContent={
+                  <div className="space-y-6">
+                    {/* Engagement Meter */}
+                    <EngagementMeter
+                      engagement={{
+                        score: frustrationIndex?.score || 0,
+                        cognitive_load: affectState === 'confused' ? 'high' : 'medium',
+                        attention_level: affectState === 'bored' ? 'low' : 'high',
+                        timestamp: new Date().toISOString()
+                      }}
+                      connected={true}
+                    />
 
-              {/* Content View */}
-              {viewMode === 'content' && session?.current_card && (
+                    {/* Session Progress */}
+                    <div className="bg-white rounded-lg shadow-sm p-4 border border-gray-100">
+                      <h3 className="text-sm font-semibold text-gray-900 mb-3">Session Progress</h3>
+                      <div className="space-y-3">
+                        <div className="flex justify-between text-xs text-gray-600">
+                          <span>Progress</span>
+                          <span className="font-medium text-gray-900">{session.cards_reviewed} / 20</span>
+                        </div>
+                        <div className="w-full bg-gray-100 rounded-full h-1.5">
+                          <div
+                            className="bg-blue-500 h-1.5 rounded-full transition-all"
+                            style={{
+                              width: `${session.cards_reviewed > 0
+                                ? (session.cards_correct / session.cards_reviewed) * 100
+                                : 0}%`
+                            }}
+                          />
+                        </div>
+                        <div className="flex justify-between text-xs border-t pt-2 mt-2">
+                          <span className="text-gray-500">Correct</span>
+                          <span className="font-medium text-green-600">{session.cards_correct}</span>
+                        </div>
+                        <button
+                          onClick={endSession}
+                          className="w-full mt-2 py-1.5 px-3 bg-red-50 text-red-600 text-xs font-medium rounded hover:bg-red-100 transition"
+                        >
+                          End Session
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Stats Display */}
+                    {lastResponse && (
+                      <LearningStats
+                        xp_earned={lastResponse.xp_earned}
+                        new_total_xp={lastResponse.new_total_xp}
+                        level={lastResponse.level}
+                        level_progress={lastResponse.level_progress}
+                        achievement={lastResponse.achievement_unlocked}
+                        showAnimation={true}
+                      />
+                    )}
+
+                    {/* Tips */}
+                    <div className="bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg shadow-md p-4 text-white">
+                      <h3 className="text-sm font-semibold mb-2">💡 Tips</h3>
+                      <ul className="space-y-1 text-xs opacity-90">
+                        <li>• Read carefully</li>
+                        <li>• Rate honestly</li>
+                        <li>• Maintain streak</li>
+                      </ul>
+                    </div>
+                  </div>
+                }
+              />
+            }
+          >
+            <div className="max-w-4xl mx-auto py-6">
+              {viewMode === 'content' && session.current_card && (
                 <>
                   {lastResponse && (
                     <ScaffoldingPanel
@@ -290,8 +349,7 @@ export default function LearnPage() {
                 </>
               )}
 
-              {/* Question View */}
-              {viewMode === 'question' && session?.current_card && (
+              {viewMode === 'question' && session.current_card && (
                 <>
                   {lastResponse && (
                     <ScaffoldingPanel
@@ -307,152 +365,79 @@ export default function LearnPage() {
                   />
                 </>
               )}
-
-              {/* Completed State */}
-              {viewMode === 'completed' && session && (
-                <div className="bg-white rounded-lg shadow-lg p-12 text-center">
-                  <span className="text-6xl mb-4 block">🎉</span>
-                  <h2 className="text-3xl font-bold text-gray-900 mb-4">
-                    Session Complete!
-                  </h2>
-                  <div className="max-w-md mx-auto space-y-4 mb-8">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="p-4 bg-blue-50 rounded-lg">
-                        <p className="text-sm text-gray-600">Cards Reviewed</p>
-                        <p className="text-2xl font-bold text-gray-900">{session.cards_reviewed}</p>
-                      </div>
-                      <div className="p-4 bg-green-50 rounded-lg">
-                        <p className="text-sm text-gray-600">Success Rate</p>
-                        <p className="text-2xl font-bold text-gray-900">
-                          {session.cards_reviewed > 0
-                            ? Math.round((session.cards_correct / session.cards_reviewed) * 100)
-                            : 0}%
-                        </p>
-                      </div>
-                      <div className="p-4 bg-purple-50 rounded-lg">
-                        <p className="text-sm text-gray-600">XP Earned</p>
-                        <p className="text-2xl font-bold text-gray-900">{session.total_xp_earned}</p>
-                      </div>
-                      <div className="p-4 bg-orange-50 rounded-lg">
-                        <p className="text-sm text-gray-600">Achievements</p>
-                        <p className="text-2xl font-bold text-gray-900">{session.achievements_unlocked.length}</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex space-x-4 justify-center">
-                    <button
-                      onClick={startSession}
-                      className="px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white font-semibold rounded-lg hover:from-purple-700 hover:to-blue-700 transition"
-                    >
-                      Start New Session
-                    </button>
-                    <Link
-                      href="/dashboard"
-                      className="px-6 py-3 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300 transition"
-                    >
-                      Back to Dashboard
-                    </Link>
-                  </div>
-                </div>
-              )}
             </div>
-
-            {/* Sidebar - Session Stats */}
-            <div className="space-y-6">
-              {/* Engagement Meter */}
-              {session && viewMode !== 'idle' && viewMode !== 'completed' && (
-                <EngagementMeter
-                  engagement={engagement}
-                  connected={telemetryConnected}
-                />
-              )}
-
-              {/* Session Progress */}
-              {session && viewMode !== 'idle' && (
-                <div className="bg-white rounded-lg shadow-md p-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Session Progress</h3>
-                  <div className="space-y-4">
-                    <div>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span className="text-gray-600">Cards Reviewed</span>
-                        <span className="font-semibold text-gray-900">{session.cards_reviewed}</span>
-                      </div>
-                    </div>
-                    <div>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span className="text-gray-600">Correct Answers</span>
-                        <span className="font-semibold text-gray-900">{session.cards_correct}</span>
-                      </div>
-                    </div>
-                    <div>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span className="text-gray-600">Success Rate</span>
-                        <span className="font-semibold text-gray-900">
-                          {session.cards_reviewed > 0
-                            ? Math.round((session.cards_correct / session.cards_reviewed) * 100)
-                            : 0}%
-                        </span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div
-                          className="bg-green-500 h-2 rounded-full transition-all"
-                          style={{
-                            width: `${session.cards_reviewed > 0
-                              ? (session.cards_correct / session.cards_reviewed) * 100
-                              : 0}%`
-                          }}
-                        />
-                      </div>
-                    </div>
-                    <div className="pt-4 border-t">
-                      <button
-                        onClick={endSession}
-                        className="w-full py-2 px-4 bg-red-100 text-red-700 font-medium rounded-lg hover:bg-red-200 transition text-sm"
-                      >
-                        End Session
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Stats Display */}
-              {lastResponse && (
-                <LearningStats
-                  xp_earned={lastResponse.xp_earned}
-                  new_total_xp={lastResponse.new_total_xp}
-                  level={lastResponse.level}
-                  level_progress={lastResponse.level_progress}
-                  achievement={lastResponse.achievement_unlocked}
-                  showAnimation={true}
-                />
-              )}
-
-              {/* Tips */}
-              <div className="bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg shadow-md p-6 text-white">
-                <h3 className="text-lg font-semibold mb-3">💡 Learning Tips</h3>
-                <ul className="space-y-2 text-sm">
-                  <li className="flex items-start space-x-2">
-                    <span>•</span>
-                    <span>Read content carefully before answering</span>
-                  </li>
-                  <li className="flex items-start space-x-2">
-                    <span>•</span>
-                    <span>Be honest with your ratings for best results</span>
-                  </li>
-                  <li className="flex items-start space-x-2">
-                    <span>•</span>
-                    <span>Review daily to maintain your streak</span>
-                  </li>
-                  <li className="flex items-start space-x-2">
-                    <span>•</span>
-                    <span>ZPD adapts to keep you challenged</span>
-                  </li>
-                </ul>
+          </SplitScreenLayout>
+        ) : (
+          <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 overflow-auto w-full">
+            {/* Idle State */}
+            {viewMode === 'idle' && (
+              <div className="bg-white rounded-lg shadow-lg p-12 text-center max-w-2xl mx-auto mt-10">
+                <span className="text-6xl mb-4 block">🎓</span>
+                <h2 className="text-3xl font-bold text-gray-900 mb-4">
+                  Ready to Learn?
+                </h2>
+                <p className="text-gray-600 mb-8 max-w-md mx-auto">
+                  Start your adaptive learning session. We'll personalize the experience to keep you in the optimal learning zone.
+                </p>
+                <button
+                  onClick={startSession}
+                  disabled={loading}
+                  className="px-8 py-4 bg-gradient-to-r from-purple-600 to-blue-600 text-white font-semibold rounded-lg hover:from-purple-700 hover:to-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+                >
+                  {loading ? 'Starting...' : 'Start Learning Session'}
+                </button>
               </div>
-            </div>
-          </div>
-        </main>
+            )}
+
+            {/* Completed State */}
+            {viewMode === 'completed' && session && (
+              <div className="bg-white rounded-lg shadow-lg p-12 text-center max-w-2xl mx-auto mt-10">
+                <span className="text-6xl mb-4 block">🎉</span>
+                <h2 className="text-3xl font-bold text-gray-900 mb-4">
+                  Session Complete!
+                </h2>
+                <div className="max-w-md mx-auto space-y-4 mb-8">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-4 bg-blue-50 rounded-lg">
+                      <p className="text-sm text-gray-600">Cards Reviewed</p>
+                      <p className="text-2xl font-bold text-gray-900">{session.cards_reviewed}</p>
+                    </div>
+                    <div className="p-4 bg-green-50 rounded-lg">
+                      <p className="text-sm text-gray-600">Success Rate</p>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {session.cards_reviewed > 0
+                          ? Math.round((session.cards_correct / session.cards_reviewed) * 100)
+                          : 0}%
+                      </p>
+                    </div>
+                    <div className="p-4 bg-purple-50 rounded-lg">
+                      <p className="text-sm text-gray-600">XP Earned</p>
+                      <p className="text-2xl font-bold text-gray-900">{session.total_xp_earned}</p>
+                    </div>
+                    <div className="p-4 bg-orange-50 rounded-lg">
+                      <p className="text-sm text-gray-600">Achievements</p>
+                      <p className="text-2xl font-bold text-gray-900">{session.achievements_unlocked.length}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex space-x-4 justify-center">
+                  <button
+                    onClick={startSession}
+                    className="px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white font-semibold rounded-lg hover:from-purple-700 hover:to-blue-700 transition"
+                  >
+                    Start New Session
+                  </button>
+                  <Link
+                    href="/dashboard"
+                    className="px-6 py-3 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300 transition"
+                  >
+                    Back to Dashboard
+                  </Link>
+                </div>
+              </div>
+            )}
+          </main>
+        )}
       </div>
     </ProtectedRoute>
   )

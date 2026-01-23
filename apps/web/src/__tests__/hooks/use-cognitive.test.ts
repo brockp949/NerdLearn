@@ -43,8 +43,9 @@ describe('useFrustration', () => {
     );
 
     act(() => {
+      // Test event filtering
       result.current.addEvent({
-        event_type: 'answer_submitted',
+        event_type: 'answer',
         correct: true,
         response_time_ms: 5000,
       });
@@ -62,7 +63,7 @@ describe('useFrustration', () => {
     act(() => {
       for (let i = 0; i < 60; i++) {
         result.current.addEvent({
-          event_type: 'answer_submitted',
+          event_type: 'answer',
           correct: i % 2 === 0,
         });
       }
@@ -78,8 +79,8 @@ describe('useFrustration', () => {
     );
 
     act(() => {
-      result.current.addEvent({ event_type: 'test' });
-      result.current.addEvent({ event_type: 'test' });
+      result.current.addEvent({ event_type: 'click' });
+      result.current.addEvent({ event_type: 'click' });
     });
 
     expect(result.current.eventCount).toBe(2);
@@ -98,8 +99,8 @@ describe('useFrustration', () => {
     );
 
     act(() => {
-      result.current.addEvent({ event_type: 'test' });
-      result.current.addEvent({ event_type: 'test' });
+      result.current.addEvent({ event_type: 'click' });
+      result.current.addEvent({ event_type: 'click' });
     });
 
     const response = await act(async () => {
@@ -118,7 +119,7 @@ describe('useFrustration', () => {
     act(() => {
       for (let i = 0; i < 10; i++) {
         result.current.addEvent({
-          event_type: 'answer_submitted',
+          event_type: 'answer',
           correct: false,
           response_time_ms: 1000,
         });

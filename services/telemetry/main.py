@@ -19,7 +19,7 @@ import asyncio
 import json
 import numpy as np
 from collections import deque
-from kafka import KafkaProducer  # Using kafka-python
+import os
 import redis.asyncio as redis
 
 
@@ -36,6 +36,9 @@ class EventType(str, Enum):
     BLUR = "blur"
     PAGE_VIEW = "page_view"
     CONTENT_INTERACTION = "content_interaction"
+    IDLE_START = "idle_start"
+    IDLE_END = "idle_end"
+
 
 
 class MouseEvent(BaseModel):
@@ -262,7 +265,7 @@ app = FastAPI(
 
 # Global state
 evidence_engine = EvidenceRulesEngine()
-kafka_producer: Optional[KafkaProducer] = None
+evidence_engine = EvidenceRulesEngine()
 redis_client: Optional[redis.Redis] = None
 
 # In-memory buffers for real-time analysis
@@ -270,28 +273,25 @@ session_mouse_events: Dict[str, deque] = {}
 session_interactions: Dict[str, List[TelemetryEvent]] = {}
 
 
-# ============================================================================
-# KAFKA INTEGRATION
-# ============================================================================
-
-def get_kafka_producer() -> KafkaProducer:
-    """Get or create Kafka producer"""
-    global kafka_producer
-    if kafka_producer is None:
-        kafka_producer = KafkaProducer(
-            bootstrap_servers=['localhost:9092'],
-            value_serializer=lambda v: json.dumps(v).encode('utf-8')
-        )
-    return kafka_producer
+async def get_redis_client() -> redis.Redis:
+    """Get or create Redis client"""
+    global redis_client
+    if redis_client is None:
+        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/1")
+        redis_client = redis.from_url(redis_url, decode_responses=True)
+    return redis_client
 
 
 async def publish_event(topic: str, event: dict):
-    """Publish event to Kafka for persistence"""
+    """Publish event to Redis Stream for persistence"""
     try:
-        producer = get_kafka_producer()
-        producer.send(topic, value=event)
+        client = await get_redis_client()
+        # Redis Streams XADD
+        # We start the stream with 'telemetry:' prefix
+        stream_name = f"telemetry:{topic}"
+        await client.xadd(stream_name, {"json": json.dumps(event)})
     except Exception as e:
-        print(f"Kafka publish error: {e}")
+        print(f"Redis publish error: {e}")
 
 
 # ============================================================================
@@ -482,6 +482,18 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str, session_id: str
                 )
                 session_mouse_events[session_key].append(mouse_event)
 
+            # Handle Idle/Intervention
+            elif event.event_type == EventType.IDLE_START:
+                # Trigger Micro-Intervention
+                intervention = {
+                    "type": "intervention",
+                    "message": "It looks like you've been inactive for a while. Need any help with this concept?",
+                    "action": "Ask AI",
+                    "intervention_type": "prompt",
+                    "timestamp": datetime.now().timestamp()
+                }
+                await websocket.send_json(intervention)
+
             # Send acknowledgment
             await websocket.send_json({"status": "received"})
 
@@ -518,8 +530,8 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    if kafka_producer:
-        kafka_producer.close()
+    if redis_client:
+        await redis_client.close()
     print("🛑 Telemetry service stopped")
 
 

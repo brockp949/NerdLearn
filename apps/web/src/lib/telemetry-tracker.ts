@@ -1,3 +1,5 @@
+import * as React from 'react';
+
 /**
  * Client-Side Telemetry Tracker - Non-Invasive Affect Detection
  *
@@ -239,22 +241,22 @@ export class TelemetryTracker {
 
   private registerEventListeners(): void {
     // Click events
-    const clickHandler = this.handleClick.bind(this);
+    const clickHandler = (e: Event) => this.handleClick(e as MouseEvent);
     document.addEventListener('click', clickHandler, { capture: true });
     this.boundHandlers.set('click', clickHandler);
 
     // Mouse movement
-    const mouseMoveHandler = this.handleMouseMove.bind(this);
+    const mouseMoveHandler = (e: Event) => this.handleMouseMove(e as MouseEvent);
     document.addEventListener('mousemove', mouseMoveHandler, { passive: true });
     this.boundHandlers.set('mousemove', mouseMoveHandler);
 
     // Scroll
-    const scrollHandler = this.handleScroll.bind(this);
+    const scrollHandler = (e: Event) => this.handleScroll(e);
     window.addEventListener('scroll', scrollHandler, { passive: true });
     this.boundHandlers.set('scroll', scrollHandler);
 
     // Keyboard
-    const keyHandler = this.handleKeypress.bind(this);
+    const keyHandler = (e: Event) => this.handleKeypress(e as KeyboardEvent);
     document.addEventListener('keydown', keyHandler, { passive: true });
     this.boundHandlers.set('keydown', keyHandler);
 
@@ -567,7 +569,7 @@ export class TelemetryTracker {
     }
   }
 
-  private trackEvent(type: TelemetryEventType, data: Record<string, unknown>): void {
+  public trackEvent(type: TelemetryEventType, data: Record<string, unknown>): void {
     const event: TelemetryEvent = {
       type,
       timestamp: Date.now(),
@@ -596,20 +598,20 @@ export class TelemetryTracker {
     // Prepare payload
     const payload = this.config.sendOnlyInferredState
       ? {
-          sessionId: this.sessionId,
-          userId: this.userId,
-          courseId: this.courseId,
-          conceptId: this.conceptId,
-          affectState: this.currentAffectState,
-          frustrationIndex: this.frustrationIndex,
-          timestamp: Date.now(),
-          eventCount: this.eventBuffer.length,
-        }
+        sessionId: this.sessionId,
+        userId: this.userId,
+        courseId: this.courseId,
+        conceptId: this.conceptId,
+        affectState: this.currentAffectState,
+        frustrationIndex: this.frustrationIndex,
+        timestamp: Date.now(),
+        eventCount: this.eventBuffer.length,
+      }
       : {
-          events: [...this.eventBuffer],
-          affectState: this.currentAffectState,
-          frustrationIndex: this.frustrationIndex,
-        };
+        events: [...this.eventBuffer],
+        affectState: this.currentAffectState,
+        frustrationIndex: this.frustrationIndex,
+      };
 
     // Clear buffer before sending (to avoid duplicate sends)
     this.eventBuffer = [];
@@ -686,7 +688,5 @@ export function useTelemetryTracker(
   };
 }
 
-// React import for the hook
-import * as React from 'react';
 
 export default TelemetryTracker;

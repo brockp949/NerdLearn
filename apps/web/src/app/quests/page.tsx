@@ -157,11 +157,10 @@ export default function QuestsPage() {
           initial={{ width: 0 }}
           animate={{ width: `${quest.progress}%` }}
           transition={{ duration: 0.5, delay: 0.2 }}
-          className={`h-full ${
-            quest.status === "completed"
+          className={`h-full ${quest.status === "completed"
               ? "bg-gradient-to-r from-purple-500 to-pink-500"
               : "bg-gradient-to-r from-primary to-cyan-500"
-          }`}
+            }`}
         />
       </div>
 
@@ -249,9 +248,8 @@ export default function QuestsPage() {
             cx="24"
             cy="24"
             r="20"
-            className={`fill-none ${
-              quest.status === "completed" ? "stroke-purple-500" : "stroke-primary"
-            }`}
+            className={`fill-none ${quest.status === "completed" ? "stroke-purple-500" : "stroke-primary"
+              }`}
             strokeWidth="4"
             strokeDasharray={`${quest.progress * 1.26} 126`}
             strokeLinecap="round"
@@ -327,7 +325,7 @@ export default function QuestsPage() {
 
             {/* Wizard Component */}
             <CurriculumWizard
-              courseId="new_course"
+              courseId={0} // 0 indicates a new course generation
               onComplete={handleCurriculumComplete}
             />
           </motion.div>

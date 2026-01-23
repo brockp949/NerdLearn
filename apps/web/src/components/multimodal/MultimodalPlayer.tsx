@@ -172,7 +172,7 @@ export function MultimodalPlayer({
     >
       {diagramData ? (
         <InteractiveDiagram
-          data={diagramData}
+          diagram={diagramData}
           onNodeClick={(nodeId) => console.log("Node clicked:", nodeId)}
         />
       ) : (

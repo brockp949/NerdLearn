@@ -31,7 +31,7 @@ export type {
   DebateSummary,
   DebateParticipant,
   // Code Evaluator
-  DifficultyLevel,
+  CodingDifficultyLevel,
   EvaluationDimension,
   HintLevel,
   FeedbackType,

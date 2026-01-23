@@ -14,13 +14,14 @@ torch==2.1.2
 transformers==4.36.2
 sentence-transformers==2.2.2
 
-# Vector Store
-qdrant-client==1.7.0
-
-# Graph Database
-neo4j==5.15.0
+# Database
+pgvector==0.2.4
+psycopg2-binary==2.9.9
 
 # Utilities
 python-dotenv==1.0.0
 httpx==0.25.2
 pillow==10.1.0
+spacy==3.7.2
+https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl
+

@@ -1,14 +1,17 @@
 import PyPDF2
 import os
 from app.services.vector_store import VectorStoreService
-from typing import List, Dict, Any
+from app.services.graph_service import AsyncGraphService
+from app.services.community_service import CommunityDetectionService
+from typing import List, Dict, Any, Optional
 
 class IngestionService:
     """Service for ingesting content files"""
 
     def __init__(self, db=None):
         self.db = db
-        self.vector_store = VectorStoreService()
+        self.vector_store = VectorStoreService(db=self.db)
+        self.graph_service = AsyncGraphService(db=self.db)
 
     async def ingest_file(self, file_path: str, course_id: int = 1) -> int:
         """
@@ -40,7 +43,40 @@ class IngestionService:
             })
             
         count = await self.vector_store.upsert_documents(documents)
+        
+        # Graph Construction
+        try:
+            # Join text for better extraction context
+            full_text = "\n".join([d["text"] for d in documents])
+            print(f"DEBUG: Processing {len(full_text)} chars for graph extraction.")
+            concepts = self.graph_service.extract_concepts(full_text)
+            print(f"DEBUG: Extracted {len(concepts)} concepts: {concepts[:5]}...")
+            
+            # Create generic module for file if not exists
+            # We use file basename as module title for now
+            module_id = abs(hash(file_path)) % 100000 
+            await self.graph_service.create_module_node(course_id, module_id, os.path.basename(file_path))
+            
+            for concept in concepts:
+                await self.graph_service.create_concept_node(
+                    course_id=course_id,
+                    module_id=module_id,
+                    name=concept
+                )
+            
+            await self.db.commit()
+            
+        except Exception as e:
+            print(f"Graph update failed: {e}")
+            await self.db.rollback()
+            
         return count
+
+    async def optimize_course(self, course_id: int):
+        """Run community detection and summarization"""
+        cd_service = CommunityDetectionService(db=self.db)
+        await cd_service.run_detection(course_id)
+        await cd_service.summarize_communities(course_id)
 
     def _extract_and_chunk_pdf(self, file_path: str, chunk_size: int = 1000) -> List[Dict]:
         """Extract text from PDF and split into chunks"""

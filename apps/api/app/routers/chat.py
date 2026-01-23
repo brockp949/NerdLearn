@@ -86,7 +86,7 @@ async def chat_with_content(
 
     try:
         # Get vector store service
-        vector_store = VectorStoreService()
+        vector_store = VectorStoreService(db=db)
 
         # Get user mastery levels for adaptive responses
         mastery_result = await db.execute(

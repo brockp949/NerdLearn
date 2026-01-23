@@ -7,6 +7,7 @@ import { Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useGraphData } from "@/hooks/use-graph-data";
 import { GraphNode } from "@/types/graph";
+import { ChatInterface } from "@/components/chat/chat-interface";
 
 const ForceGraph3D = dynamic(() => import('react-force-graph-3d'), { ssr: false });
 
@@ -103,6 +104,16 @@ export default function BrainPage() {
                         <span className="text-lg font-bold">{graphData.links.length}</span>
                     </div>
                 </div>
+            </motion.div>
+
+            {/* Chat Interface Overlay */}
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.4 }}
+                className="absolute bottom-4 right-4 z-20"
+            >
+                <ChatInterface />
             </motion.div>
 
             <motion.div

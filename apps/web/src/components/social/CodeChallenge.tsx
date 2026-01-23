@@ -26,7 +26,7 @@ import { Button } from "@/components/ui/button";
 import { socialApi } from "@/lib/api";
 import type {
   CodingChallenge,
-  DifficultyLevel,
+  CodingDifficultyLevel,
   EvaluationResult,
   HintLevel,
   HintResponse,
@@ -37,7 +37,7 @@ import type {
 // CONFIGURATION
 // =============================================================================
 
-const difficultyConfig: Record<DifficultyLevel, {
+const difficultyConfig: Record<CodingDifficultyLevel, {
   label: string;
   color: string;
   bgColor: string;
@@ -94,7 +94,7 @@ export function CodeChallengeComponent({
   const [availableChallenges, setAvailableChallenges] = useState<Array<{
     challenge_id: string;
     title: string;
-    difficulty: DifficultyLevel;
+    difficulty: CodingDifficultyLevel;
     concepts: string[];
     estimated_minutes: number;
   }>>([]);
@@ -531,11 +531,10 @@ export function CodeChallengeComponent({
                   {result.feedback.slice(0, 5).map((fb, i) => (
                     <div key={i} className="p-2 rounded-lg bg-white/5 border border-white/10 text-xs">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className={`px-1.5 py-0.5 rounded ${
-                          fb.type === "praise" ? "bg-green-500/20 text-green-400" :
+                        <span className={`px-1.5 py-0.5 rounded ${fb.type === "praise" ? "bg-green-500/20 text-green-400" :
                           fb.type === "issue" ? "bg-red-500/20 text-red-400" :
-                          "bg-blue-500/20 text-blue-400"
-                        }`}>
+                            "bg-blue-500/20 text-blue-400"
+                          }`}>
                           {fb.type}
                         </span>
                         {fb.line_number && (

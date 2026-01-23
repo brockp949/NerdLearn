@@ -14,7 +14,7 @@ Key Features:
 4. Agent coordination and handoff protocols
 5. Revision loop support for iterative refinement
 """
-from typing import Dict, Any, List, Optional, Callable, Awaitable
+from typing import Dict, Any, List, Optional, Callable, Awaitable, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum

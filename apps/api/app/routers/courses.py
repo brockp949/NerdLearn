@@ -143,7 +143,7 @@ async def publish_course(course_id: int, db: AsyncSession = Depends(get_db)):
 @router.post("/{course_id}/process-all", response_model=BatchProcessingResponse)
 async def process_all_modules(
     course_id: int,
-    mode: str = Query(default="parallel", regex="^(parallel|sequential)$"),
+    mode: str = Query(default="parallel", pattern="^(parallel|sequential)$"),
     reprocess: bool = Query(default=False, description="Reprocess already processed modules"),
     db: AsyncSession = Depends(get_db)
 ):

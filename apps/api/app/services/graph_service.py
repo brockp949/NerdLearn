@@ -1,214 +1,228 @@
 """
 Async Knowledge Graph Service for API
-Implements Neo4j integration with NER-based concept extraction per research guidelines
-
-Research alignment:
-- Knowledge Graph Construction: GNNs, BERT-NER (92.8% F1), prerequisite extraction
-- Prerequisite detection using sequential ordering and co-occurrence
+Implements Apache AGE integration with PostgreSQL
 """
-from typing import List, Dict, Any, Optional, Tuple
-from neo4j import AsyncGraphDatabase
+from typing import List, Dict, Any, Optional
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
 from app.core.config import settings
 import re
 from collections import Counter
 import logging
+import json
+from fastapi import Depends
+from app.core.database import get_db
+
+import spacy
 
 logger = logging.getLogger(__name__)
+
+# Global NLP instance to avoid reloading per request
+_nlp = None
+
+import os
+
+def get_nlp_model():
+    global _nlp
+    
+    # Check if heavy NLP is enabled (default to False for API safety)
+    if os.getenv("ENABLE_HEAVY_NLP", "false").lower() != "true":
+        return None
+
+    if _nlp is None:
+        try:
+            _nlp = spacy.load("en_core_web_sm")
+        except OSError:
+            logger.warning("Spacy model not found. Downloading...")
+            from spacy.cli import download
+            download("en_core_web_sm")
+            _nlp = spacy.load("en_core_web_sm")
+        except Exception as e:
+            logger.error(f"Failed to load Spacy: {e}")
+            return None
+    return _nlp
 
 
 class AsyncGraphService:
     """
-    Async Knowledge Graph Service for managing concept relationships in Neo4j
-
-    Features:
-    - Async Neo4j operations for FastAPI compatibility
-    - Concept extraction with technical term detection
-    - Prerequisite relationship management
-    - Learning path generation based on graph structure
+    Async Knowledge Graph Service using Apache AGE (PostgreSQL Extension)
     """
 
-    def __init__(self):
-        self.driver = None
-        self._connected = False
+    def __init__(self, db: AsyncSession):
+        self.db = db
+        self.graph_name = "nerdlearn_graph"
+        self._initialized = False
 
-    async def connect(self):
-        """Initialize Neo4j connection"""
-        if not self._connected:
-            self.driver = AsyncGraphDatabase.driver(
-                settings.NEO4J_URI,
-                auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD)
-            )
-            self._connected = True
-            logger.info("Connected to Neo4j")
+    async def _init_age(self):
+        """Initialize AGE extension and graph if needed"""
+        if not self._initialized:
+            try:
+                # Load extension
+                await self.db.execute(text("LOAD 'age'"))
+                await self.db.execute(text("SET search_path = ag_catalog, \"$user\", public"))
+                
+                # Check if graph exists
+                res = await self.db.execute(text("SELECT count(*) FROM ag_graph WHERE name = :name"), {"name": self.graph_name})
+                count = res.scalar()
+                
+                if count == 0:
+                    await self.db.execute(text(f"SELECT create_graph('{self.graph_name}')"))
+                
+                self._initialized = True
+            except Exception as e:
+                logger.warning(f"AGE initialization warning: {e}")
 
-    async def close(self):
-        """Close Neo4j connection"""
-        if self.driver:
-            await self.driver.close()
-            self._connected = False
-            logger.info("Disconnected from Neo4j")
-
-    async def ensure_connected(self):
-        """Ensure connection is established"""
-        if not self._connected:
-            await self.connect()
+    async def run_cypher(self, query: str, columns_def: str, params: dict = None) -> List[Any]:
+        """
+        Run a cypher query using AGE.
+        """
+        await self._init_age()
+        
+        # Parameter substitution
+        formatted_query = query
+        if params:
+            for k, v in params.items():
+                if isinstance(v, str):
+                    safe_v = v.replace("'", "\\'")
+                    formatted_query = formatted_query.replace(f"${k}", f"'{safe_v}'")
+                elif isinstance(v, (int, float)):
+                    formatted_query = formatted_query.replace(f"${k}", str(v))
+                elif isinstance(v, list):
+                    safe_v = json.dumps(v).replace("'", "\\'")
+                    formatted_query = formatted_query.replace(f"${k}", f"{safe_v}")
+        
+        # Prepare SQL with dollar-quoted string for AGE
+        # We use explicit $$ quoting as required by AGE's cypher() function
+        # This avoids issues with single-quote escaping in the SQL layer
+        sql = f"SELECT * FROM cypher('{self.graph_name}', $$ {formatted_query} $$) as ({columns_def})"
+        
+        try:
+            # Escape colons for SQLAlchemy text() parsing
+            # This is necessary because SQLAlchemy interprets :word as a bind parameter
+            stmt = text(sql.replace(":", "\\:"))
+            
+            result = await self.db.execute(stmt)
+            return result.all()
+        except Exception as e:
+            logger.error(f"Cypher Query Failed: {sql} | Error: {e}")
+            raise
 
     # ============== Graph Queries ==============
 
     async def get_course_graph(self, course_id: int) -> Dict[str, Any]:
-        """
-        Get complete knowledge graph for a course
-
-        Args:
-            course_id: Course ID
-
-        Returns:
-            Graph with nodes (concepts) and edges (prerequisites)
-        """
-        await self.ensure_connected()
-
+        # Return a single JSON object column to avoid driver issues with multiple agtype columns
+        columns = "res agtype"
         query = """
         MATCH (c:Course {id: $course_id})-[:HAS_MODULE]->(m:Module)-[:TEACHES]->(con:Concept)
         OPTIONAL MATCH (con)-[r:PREREQUISITE_FOR]->(con2:Concept)
         WHERE con2.course_id = $course_id
-        RETURN con.name as concept,
-               con.difficulty as difficulty,
-               con.importance as importance,
-               m.title as module,
-               m.id as module_id,
-               m.order as module_order,
-               collect(DISTINCT {target: con2.name, confidence: r.confidence, type: r.type}) as outgoing_prereqs
-        ORDER BY m.order, con.name
+        RETURN {
+            c_name: con.name,
+            c_diff: con.difficulty,
+            c_imp: con.importance,
+            m_title: m.title,
+            m_id: m.id,
+            m_order: m.module_order,
+            p_target: con2.name,
+            p_conf: r.confidence,
+            p_type: r.type
+        }
         """
-
-        async with self.driver.session() as session:
-            result = await session.run(query, course_id=course_id)
-            records = await result.data()
-
-        nodes = []
+        
+        records = await self.run_cypher(query, columns, {"course_id": course_id})
+        
+        nodes_map = {}
         edges = []
-        seen_concepts = set()
-        concept_modules = {}
 
         for record in records:
-            concept = record["concept"]
+            # record.res is the map
+            data = self._parse_agtype(record.res)
+            if not data:
+                continue
+                
+            # Handle potential string serialization of agtype
+            if isinstance(data, str):
+                try:
+                    data = json.loads(data)
+                except:
+                    pass
+            
+            # AGE sometimes returns keys without quotes in string representation if not valid JSON? 
+            # Ideally asyncpg + age returns dict or valid JSON string.
+            
+            concept = data.get('c_name')
+            if not concept:
+                continue
 
-            if concept and concept not in seen_concepts:
-                nodes.append({
+            # Aggregate nodes
+            if concept not in nodes_map:
+                nodes_map[concept] = {
                     "id": concept,
                     "label": concept,
-                    "module": record["module"],
-                    "module_id": record["module_id"],
-                    "module_order": record["module_order"] or 0,
-                    "difficulty": record["difficulty"] or 5.0,
-                    "importance": record["importance"] or 0.5,
+                    "module": data.get('m_title'),
+                    "module_id": data.get('m_id'),
+                    "module_order": data.get('m_order') or 0,
+                    "difficulty": data.get('c_diff') or 5.0,
+                    "importance": data.get('c_imp') or 0.5,
                     "type": "concept"
-                })
-                seen_concepts.add(concept)
-                concept_modules[concept] = record["module_order"] or 0
+                }
 
-            # Add prerequisite edges
-            for prereq in record["outgoing_prereqs"] or []:
-                if prereq.get("target"):
-                    edges.append({
-                        "source": concept,
-                        "target": prereq["target"],
-                        "type": prereq.get("type", "prerequisite"),
-                        "confidence": prereq.get("confidence", 0.5)
-                    })
+            # Collect edge
+            target = data.get('p_target')
+            if target:
+                edges.append({
+                    "source": concept,
+                    "target": target,
+                    "type": data.get('p_type') or "prerequisite",
+                    "confidence": data.get('p_conf') or 0.5
+                })
 
         return {
-            "nodes": nodes,
+            "nodes": list(nodes_map.values()),
             "edges": edges,
             "meta": {
                 "course_id": course_id,
-                "total_concepts": len(nodes),
+                "total_concepts": len(nodes_map),
                 "total_relationships": len(edges)
             }
         }
 
-    async def get_concept_details(
-        self, course_id: int, concept_name: str
-    ) -> Optional[Dict[str, Any]]:
-        """
-        Get detailed information about a concept including prerequisites and dependents
-
-        Args:
-            course_id: Course ID
-            concept_name: Name of the concept
-
-        Returns:
-            Concept details with prerequisites and dependent concepts
-        """
-        await self.ensure_connected()
-
+    async def get_concept_details(self, course_id: int, concept_name: str) -> Optional[Dict[str, Any]]:
+        columns = "name agtype, difficulty agtype, importance agtype, description agtype, module agtype, module_id agtype, prerequisites agtype, dependents agtype"
         query = """
         MATCH (con:Concept {name: $concept_name, course_id: $course_id})
         OPTIONAL MATCH (m:Module)-[:TEACHES]->(con)
         OPTIONAL MATCH (prereq:Concept)-[r1:PREREQUISITE_FOR]->(con)
         OPTIONAL MATCH (con)-[r2:PREREQUISITE_FOR]->(dependent:Concept)
-        RETURN con.name as name,
-               con.difficulty as difficulty,
-               con.importance as importance,
-               con.description as description,
-               m.title as module,
-               m.id as module_id,
-               collect(DISTINCT {name: prereq.name, confidence: r1.confidence}) as prerequisites,
-               collect(DISTINCT {name: dependent.name, confidence: r2.confidence}) as dependents
+        RETURN con.name, con.difficulty, con.importance, con.description, m.title, m.id, 
+               collect({"name": prereq.name, "confidence": r1.confidence}), 
+               collect({"name": dependent.name, "confidence": r2.confidence})
         """
-
-        async with self.driver.session() as session:
-            result = await session.run(
-                query,
-                course_id=course_id,
-                concept_name=concept_name
-            )
-            record = await result.single()
-
-        if not record:
+        
+        records = await self.run_cypher(query, columns, {"course_id": course_id, "concept_name": concept_name})
+        if not records:
             return None
-
+        
+        record = records[0]
+        name = self._parse_agtype(record.name)
+        if not name:
+            return None
+            
         return {
-            "name": record["name"],
-            "difficulty": record["difficulty"] or 5.0,
-            "importance": record["importance"] or 0.5,
-            "description": record["description"],
-            "module": record["module"],
-            "module_id": record["module_id"],
-            "prerequisites": [
-                p for p in record["prerequisites"]
-                if p.get("name")
-            ],
-            "dependents": [
-                d for d in record["dependents"]
-                if d.get("name")
-            ]
+            "name": name,
+            "difficulty": self._parse_agtype(record.difficulty) or 5.0,
+            "importance": self._parse_agtype(record.importance) or 0.5,
+            "description": self._parse_agtype(record.description),
+            "module": self._parse_agtype(record.module),
+            "module_id": self._parse_agtype(record.module_id),
+            "prerequisites": [p for p in (self._parse_agtype(record.prerequisites) or []) if p.get("name")],
+            "dependents": [d for d in (self._parse_agtype(record.dependents) or []) if d.get("name")]
         }
 
-    async def get_learning_path(
-        self,
-        course_id: int,
-        target_concepts: List[str],
-        user_mastered: Optional[List[str]] = None
-    ) -> List[Dict[str, Any]]:
-        """
-        Generate optimal learning path using difficulty-weighted sequencing
-        
-        Implements Dijkstra-inspired traversal where path "cost" is concept difficulty.
-        This ensures the user is presented with the most accessible prerequisites first.
-
-        Args:
-            course_id: Course ID
-            target_concepts: Concepts the user wants to learn
-            user_mastered: Concepts already mastered by user
-
-        Returns:
-            Ordered list of concepts to learn
-        """
-        await self.ensure_connected()
+    async def get_learning_path(self, course_id: int, target_concepts: List[str], user_mastered: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         user_mastered = user_mastered or []
-
-        # Find all prerequisite chains with difficulty-based ordering
+        columns = "name agtype, difficulty agtype, module_order agtype, depth agtype, weight agtype"
+        
         query = """
         UNWIND $targets as target
         MATCH path = (prereq:Concept)-[:PREREQUISITE_FOR*0..10]->(goal:Concept {name: target, course_id: $course_id})
@@ -217,163 +231,56 @@ class AsyncGraphService:
         UNWIND concepts as concept
         WITH DISTINCT concept, max(depth) as max_depth
         OPTIONAL MATCH (m:Module)-[:TEACHES]->(concept)
-        RETURN concept.name as name,
-               concept.difficulty as difficulty,
-               m.order as module_order,
-               max_depth as depth,
-               # Weighting formula: combine depth in graph with intrinsic difficulty
-               (max_depth * 2.0 + coalesce(concept.difficulty, 5.0)) as weight
-        ORDER BY weight ASC, module_order ASC
+        RETURN concept.name,
+               concept.difficulty,
+               m.module_order,
+               max_depth,
+               (max_depth * 2.0 + coalesce(concept.difficulty, 5.0))
+        ORDER BY (max_depth * 2.0 + coalesce(concept.difficulty, 5.0)) ASC, m.module_order ASC
         """
-
-        async with self.driver.session() as session:
-            result = await session.run(
-                query,
-                course_id=course_id,
-                targets=target_concepts
-            )
-            records = await result.data()
-
-        # Filter out already mastered concepts
-        learning_path = [
-            {
-                "name": r["name"],
-                "difficulty": r["difficulty"] or 5.0,
-                "depth": r["depth"],
-                "module_order": r["module_order"] or 0,
-                "weight": r["weight"]
-            }
-            for r in records
-            if r["name"] not in user_mastered
-        ]
-
+        
+        records = await self.run_cypher(query, columns, {"course_id": course_id, "targets": target_concepts})
+        
+        learning_path = []
+        for r in records:
+             name = self._parse_agtype(r.name)
+             if name and name not in user_mastered:
+                 learning_path.append({
+                     "name": name,
+                     "difficulty": self._parse_agtype(r.difficulty) or 5.0,
+                     "depth": self._parse_agtype(r.depth),
+                     "module_order": self._parse_agtype(r.module_order) or 0,
+                     "weight": self._parse_agtype(r.weight)
+                 })
         return learning_path
 
-    async def get_prerequisites(
-        self, course_id: int, concept_name: str
-    ) -> List[Dict[str, Any]]:
-        """Get all prerequisites for a concept"""
-        await self.ensure_connected()
-
-        query = """
-        MATCH (prereq:Concept)-[r:PREREQUISITE_FOR]->(con:Concept {name: $concept_name, course_id: $course_id})
-        WHERE prereq.course_id = $course_id
-        RETURN prereq.name as name,
-               prereq.difficulty as difficulty,
-               r.confidence as confidence,
-               r.type as type
-        ORDER BY r.confidence DESC
-        """
-
-        async with self.driver.session() as session:
-            result = await session.run(
-                query,
-                course_id=course_id,
-                concept_name=concept_name
-            )
-            records = await result.data()
-
-        return [
-            {
-                "name": r["name"],
-                "difficulty": r["difficulty"] or 5.0,
-                "confidence": r["confidence"] or 0.5,
-                "type": r["type"] or "sequential"
-            }
-            for r in records
-        ]
-
-    async def get_dependents(
-        self, course_id: int, concept_name: str
-    ) -> List[Dict[str, Any]]:
-        """Get all concepts that depend on this concept"""
-        await self.ensure_connected()
-
-        query = """
-        MATCH (con:Concept {name: $concept_name, course_id: $course_id})-[r:PREREQUISITE_FOR]->(dependent:Concept)
-        WHERE dependent.course_id = $course_id
-        RETURN dependent.name as name,
-               dependent.difficulty as difficulty,
-               r.confidence as confidence
-        ORDER BY r.confidence DESC
-        """
-
-        async with self.driver.session() as session:
-            result = await session.run(
-                query,
-                course_id=course_id,
-                concept_name=concept_name
-            )
-            records = await result.data()
-
-        return [
-            {
-                "name": r["name"],
-                "difficulty": r["difficulty"] or 5.0,
-                "confidence": r["confidence"] or 0.5
-            }
-            for r in records
-        ]
-
-    # ============== Graph Mutations ==============
+    # ============== Mutations ==============
 
     async def create_course_node(self, course_id: int, title: str) -> bool:
-        """Create or update a course node"""
-        await self.ensure_connected()
-
+        cols = "v agtype"
         query = """
         MERGE (c:Course {id: $course_id})
-        SET c.title = $title, c.updated_at = datetime()
-        RETURN c.id as id
+        SET c.title = $title
+        RETURN c
         """
+        records = await self.run_cypher(query, cols, {"course_id": course_id, "title": title})
+        return len(records) > 0
 
-        async with self.driver.session() as session:
-            result = await session.run(query, course_id=course_id, title=title)
-            record = await result.single()
-            return record is not None
-
-    async def create_module_node(
-        self,
-        course_id: int,
-        module_id: int,
-        title: str,
-        order: int = 0
-    ) -> bool:
-        """Create or update a module node and link to course"""
-        await self.ensure_connected()
-
+    async def create_module_node(self, course_id: int, module_id: int, title: str, order: int = 0) -> bool:
+        cols = "v agtype"
         query = """
         MERGE (m:Module {id: $module_id})
-        SET m.title = $title, m.course_id = $course_id, m.order = $order
+        SET m.title = $title, m.course_id = $course_id, m.module_order = $order
         WITH m
         MATCH (c:Course {id: $course_id})
         MERGE (c)-[:HAS_MODULE]->(m)
-        RETURN m.id as id
+        RETURN m
         """
+        records = await self.run_cypher(query, cols, {"course_id": course_id, "module_id": module_id, "title": title, "order": order})
+        return len(records) > 0
 
-        async with self.driver.session() as session:
-            result = await session.run(
-                query,
-                course_id=course_id,
-                module_id=module_id,
-                title=title,
-                order=order
-            )
-            record = await result.single()
-            return record is not None
-
-    async def create_concept_node(
-        self,
-        course_id: int,
-        module_id: int,
-        name: str,
-        difficulty: float = 5.0,
-        importance: float = 0.5,
-        description: Optional[str] = None
-    ) -> bool:
-        """Create or update a concept node and link to module"""
-        await self.ensure_connected()
-
+    async def create_concept_node(self, course_id: int, module_id: int, name: str, difficulty: float = 5.0, importance: float = 0.5, description: str = None) -> bool:
+        cols = "name agtype"
         query = """
         MERGE (con:Concept {name: $name, course_id: $course_id})
         SET con.difficulty = $difficulty,
@@ -382,289 +289,232 @@ class AsyncGraphService:
         WITH con
         MATCH (m:Module {id: $module_id})
         MERGE (m)-[:TEACHES]->(con)
-        RETURN con.name as name
+        RETURN con.name
         """
+        records = await self.run_cypher(query, cols, {
+            "course_id": course_id, "module_id": module_id, "name": name, 
+            "difficulty": difficulty, "importance": importance, "description": description or ""
+        })
+        return len(records) > 0
 
-        async with self.driver.session() as session:
-            result = await session.run(
-                query,
-                course_id=course_id,
-                module_id=module_id,
-                name=name,
-                difficulty=difficulty,
-                importance=importance,
-                description=description
-            )
-            record = await result.single()
-            return record is not None
-
-    async def add_prerequisite(
-        self,
-        course_id: int,
-        prerequisite_name: str,
-        concept_name: str,
-        confidence: float = 1.0,
-        prereq_type: str = "explicit"
-    ) -> bool:
-        """
-        Add prerequisite relationship between concepts
-
-        Args:
-            course_id: Course ID
-            prerequisite_name: Name of the prerequisite concept
-            concept_name: Name of the dependent concept
-            confidence: Confidence score (0-1)
-            prereq_type: Type of prerequisite (explicit, sequential, inferred)
-        """
-        await self.ensure_connected()
-
+    async def add_prerequisite(self, course_id: int, prerequisite_name: str, concept_name: str, confidence: float = 1.0, prereq_type: str = "explicit") -> bool:
+        cols = "a agtype, b agtype"
         query = """
         MATCH (prereq:Concept {name: $prerequisite_name, course_id: $course_id})
         MATCH (con:Concept {name: $concept_name, course_id: $course_id})
         MERGE (prereq)-[r:PREREQUISITE_FOR]->(con)
         SET r.confidence = $confidence, r.type = $prereq_type
-        RETURN prereq.name as prereq, con.name as concept
+        RETURN prereq.name, con.name
         """
+        records = await self.run_cypher(query, cols, {
+            "course_id": course_id, "prerequisite_name": prerequisite_name, 
+            "concept_name": concept_name, "confidence": confidence, "prereq_type": prereq_type
+        })
+        return len(records) > 0
 
-        async with self.driver.session() as session:
-            result = await session.run(
-                query,
-                course_id=course_id,
-                prerequisite_name=prerequisite_name,
-                concept_name=concept_name,
-                confidence=confidence,
-                prereq_type=prereq_type
-            )
-            record = await result.single()
-            return record is not None
-
-    async def remove_prerequisite(
-        self,
-        course_id: int,
-        prerequisite_name: str,
-        concept_name: str
-    ) -> bool:
-        """Remove a prerequisite relationship"""
-        await self.ensure_connected()
-
+    async def remove_prerequisite(self, course_id: int, prerequisite_name: str, concept_name: str) -> bool:
+        cols = "a agtype, b agtype"
         query = """
-        MATCH (prereq:Concept {name: $prerequisite_name, course_id: $course_id})
-              -[r:PREREQUISITE_FOR]->
-              (con:Concept {name: $concept_name, course_id: $course_id})
+        MATCH (prereq:Concept {name: $prerequisite_name, course_id: $course_id})-[r:PREREQUISITE_FOR]->(con:Concept {name: $concept_name, course_id: $course_id})
         DELETE r
-        RETURN count(r) as deleted
+        RETURN prereq.name, con.name
         """
-
-        async with self.driver.session() as session:
-            result = await session.run(
-                query,
-                course_id=course_id,
-                prerequisite_name=prerequisite_name,
-                concept_name=concept_name
-            )
-            record = await result.single()
-            return record and record["deleted"] > 0
-
+        records = await self.run_cypher(query, cols, {
+            "course_id": course_id, "prerequisite_name": prerequisite_name, 
+            "concept_name": concept_name
+        })
+        return len(records) > 0
+        
     async def detect_prerequisites_sequential(self, course_id: int) -> int:
-        """
-        Detect prerequisites based on sequential module ordering
-
-        Research basis: Concepts in earlier modules are often prerequisites
-        for concepts in later modules (confidence: 0.3)
-
-        Returns:
-            Number of relationships created
-        """
-        await self.ensure_connected()
-
+        cols = "count agtype"
+        # AGE doesn't support < or > for string properties automatically, assuming explicit casting
         query = """
         MATCH (m1:Module)-[:TEACHES]->(c1:Concept)
         MATCH (m2:Module)-[:TEACHES]->(c2:Concept)
-        WHERE m1.course_id = $course_id
+        WHERE m1.course_id = $course_id 
           AND m2.course_id = $course_id
-          AND m1.order < m2.order
+          AND toInteger(m1.module_order) < toInteger(m2.module_order)
           AND c1.name <> c2.name
-          AND NOT EXISTS((c1)-[:PREREQUISITE_FOR]->(c2))
-        MERGE (c1)-[r:PREREQUISITE_FOR {confidence: 0.3, type: 'sequential'}]->(c2)
-        RETURN count(r) as created
+        MERGE (c1)-[r:PREREQUISITE_FOR]->(c2)
+        SET r.confidence = 0.3
+        RETURN count(r)
         """
+        try:
+            records = await self.run_cypher(query, cols, {"course_id": course_id})
+            if records:
+                return self._parse_agtype(records[0].count)
+            return 0
+        except Exception as e:
+            logger.error(f"Sequential detection failed: {e}")
+            return 0
 
-        async with self.driver.session() as session:
-            result = await session.run(query, course_id=course_id)
-            record = await result.single()
-            return record["created"] if record else 0
-
-    # ============== Analytics ==============
+    # ============== Stats & Extras ==============
 
     async def get_graph_stats(self, course_id: int) -> Dict[str, Any]:
-        """Get statistics about the knowledge graph"""
-        await self.ensure_connected()
-
+        cols = "module_count agtype, concept_count agtype, relation_count agtype"
         query = """
         MATCH (c:Course {id: $course_id})
         OPTIONAL MATCH (c)-[:HAS_MODULE]->(m:Module)
         OPTIONAL MATCH (m)-[:TEACHES]->(con:Concept)
-        OPTIONAL MATCH (con)-[r:PREREQUISITE_FOR]->()
-        RETURN count(DISTINCT m) as modules,
-               count(DISTINCT con) as concepts,
-               count(DISTINCT r) as prerequisites,
-               avg(con.difficulty) as avg_difficulty
+        OPTIONAL MATCH (con)-[r:PREREQUISITE_FOR]->(con2:Concept)
+        RETURN count(DISTINCT m), count(DISTINCT con), count(DISTINCT r)
         """
-
-        async with self.driver.session() as session:
-            result = await session.run(query, course_id=course_id)
-            record = await result.single()
-
-        if not record:
+        records = await self.run_cypher(query, cols, {"course_id": course_id})
+        if records:
             return {
-                "modules": 0,
-                "concepts": 0,
-                "prerequisites": 0,
-                "avg_difficulty": 0
+                "modules": self._parse_agtype(records[0].module_count),
+                "concepts": self._parse_agtype(records[0].concept_count),
+                "prerequisites": self._parse_agtype(records[0].relation_count),
+                "avg_difficulty": 5.0
             }
-
-        return {
-            "modules": record["modules"] or 0,
-            "concepts": record["concepts"] or 0,
-            "prerequisites": record["prerequisites"] or 0,
-            "avg_difficulty": round(record["avg_difficulty"] or 0, 2)
-        }
-
-    async def find_concepts_without_prerequisites(
-        self, course_id: int
-    ) -> List[str]:
-        """Find concepts that have no prerequisites (entry points)"""
-        await self.ensure_connected()
-
+        return {"modules":0, "concepts":0, "prerequisites":0, "avg_difficulty":0}
+        
+    async def find_concepts_without_prerequisites(self, course_id: int) -> List[str]:
+        cols = "name agtype"
         query = """
         MATCH (con:Concept {course_id: $course_id})
-        WHERE NOT EXISTS(()-[:PREREQUISITE_FOR]->(con))
-        RETURN con.name as name
-        ORDER BY con.name
+        WHERE NOT (()-[:PREREQUISITE_FOR]->(con))
+        RETURN con.name
         """
-
-        async with self.driver.session() as session:
-            result = await session.run(query, course_id=course_id)
-            records = await result.data()
-
-        return [r["name"] for r in records]
-
+        records = await self.run_cypher(query, cols, {"course_id": course_id})
+        return [self._parse_agtype(r.name) for r in records if r.name]
+        
     async def find_terminal_concepts(self, course_id: int) -> List[str]:
-        """Find concepts that are not prerequisites for anything (endpoints)"""
-        await self.ensure_connected()
-
+        cols = "name agtype"
         query = """
         MATCH (con:Concept {course_id: $course_id})
-        WHERE NOT EXISTS((con)-[:PREREQUISITE_FOR]->())
-        RETURN con.name as name
-        ORDER BY con.name
+        WHERE NOT ((con)-[:PREREQUISITE_FOR]->())
+        RETURN con.name
         """
+        records = await self.run_cypher(query, cols, {"course_id": course_id})
+        return [self._parse_agtype(r.name) for r in records if r.name]
+        
+    async def get_prerequisites(self, course_id: int, concept_name: str) -> List[str]:
+        cols = "name agtype"
+        query = """
+        MATCH (p:Concept {course_id: $course_id})-[r:PREREQUISITE_FOR]->(c:Concept {name: $concept_name, course_id: $course_id})
+        RETURN p.name
+        """
+        records = await self.run_cypher(query, cols, {"course_id": course_id, "concept_name": concept_name})
+        return [self._parse_agtype(r.name) for r in records if r.name]
 
-        async with self.driver.session() as session:
-            result = await session.run(query, course_id=course_id)
-            records = await result.data()
+    async def get_dependents(self, course_id: int, concept_name: str) -> List[str]:
+        cols = "name agtype"
+        query = """
+        MATCH (c:Concept {name: $concept_name, course_id: $course_id})-[r:PREREQUISITE_FOR]->(d:Concept {course_id: $course_id})
+        RETURN d.name
+        """
+        records = await self.run_cypher(query, cols, {"course_id": course_id, "concept_name": concept_name})
+        return [self._parse_agtype(r.name) for r in records if r.name]
 
-        return [r["name"] for r in records]
+    # ============== Community Detection ==============
 
-    # ============== Concept Extraction ==============
+    async def update_community_structure(self, course_id: int, community_map: Dict[str, int]) -> int:
+        cols = "count agtype"
+        count = 0
+        for name, cid in community_map.items():
+            query = """
+            MATCH (c:Concept {name: $name, course_id: $course_id})
+            SET c.community_id = $community_id
+            RETURN count(c)
+            """
+            records = await self.run_cypher(query, cols, {"name": name, "course_id": course_id, "community_id": cid})
+            if records:
+                count += self._parse_agtype(records[0].count)
+        return count
+
+    async def get_community_members(self, course_id: int, community_id: int) -> List[Dict[str, Any]]:
+        cols = "name agtype, description agtype, importance agtype"
+        query = """
+        MATCH (c:Concept {course_id: $course_id, community_id: $community_id})
+        RETURN c.name, c.description, c.importance
+        """
+        records = await self.run_cypher(query, cols, {"course_id": course_id, "community_id": community_id})
+        return [{
+            "name": self._parse_agtype(r.name),
+            "description": self._parse_agtype(r.description) or "",
+            "importance": self._parse_agtype(r.importance) or 0.0
+        } for r in records if r.name]
+        
+    async def get_all_communities(self, course_id: int) -> List[int]:
+        cols = "id agtype"
+        query = """
+        MATCH (c:Concept {course_id: $course_id})
+        WHERE c.community_id IS NOT NULL
+        RETURN DISTINCT c.community_id
+        """
+        records = await self.run_cypher(query, cols, {"course_id": course_id})
+        return sorted([int(self._parse_agtype(r.id)) for r in records if r.id is not None])
 
     def extract_concepts(self, text: str, min_freq: int = 1) -> List[str]:
         """
-        Extract concepts from text using pattern matching
-
-        Note: For production, integrate with spaCy NER or domain-specific
-        models as recommended in research (BERT-NER achieves 92.8% F1)
-
-        Args:
-            text: Text to analyze
-            min_freq: Minimum frequency threshold
-
-        Returns:
-            List of extracted concept names
+        Extract educational concepts from text using NER and noun chunking.
         """
-        concepts = []
+        nlp = get_nlp_model()
+        
+        if not nlp:
+            # Fallback regex logic
+            pattern = r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})\b"
+            matches = re.findall(pattern, text)
+            concept_counts = Counter(matches)
+            concepts = [c for c, count in concept_counts.items() if count >= min_freq and len(c) > 3]
+            return concepts[:50]
+            
+        # Limit text length to avoid excessive processing time
+        doc = nlp(text[:100000])
+        
+        candidates = []
+        
+        # 1. Named Entities
+        valid_labels = {'ORG', 'PRODUCT', 'WORK_OF_ART', 'LAW', 'LANGUAGE', 'EVENT', 'FAC'}
+        for ent in doc.ents:
+            if ent.label_ in valid_labels:
+                clean_ent = ent.text.strip()
+                if len(clean_ent) > 2 and not clean_ent.isnumeric():
+                    candidates.append(clean_ent)
 
-        # Extract capitalized multi-word phrases (potential concepts)
-        pattern = r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})\b"
-        matches = re.findall(pattern, text)
-        concept_counts = Counter(matches)
+        # 2. Capitalized Noun Chunks
+        for chunk in doc.noun_chunks:
+            clean_chunk = chunk.text.strip()
+            
+            # Remove leading determiners
+            words = clean_chunk.split()
+            if words[0].lower() in {'the', 'a', 'an', 'this', 'that', 'these', 'those'}:
+                if len(words) > 1:
+                    clean_chunk = " ".join(words[1:])
+                else:
+                    continue
 
-        # Filter by frequency and length
-        concepts.extend([
-            concept for concept, count in concept_counts.items()
-            if count >= min_freq and len(concept) > 3
-        ])
+        # 3. Capitalized Noun Chunks
+        for chunk in doc.noun_chunks:
+            clean_chunk = chunk.text.strip()
+            
+            # Remove leading determiners
+            words = clean_chunk.split()
+            if words[0].lower() in {'the', 'a', 'an', 'this', 'that', 'these', 'those'}:
+                if len(words) > 1:
+                    clean_chunk = " ".join(words[1:])
+                else:
+                    continue
 
-        # Extract technical terms
-        technical_terms = self._extract_technical_terms(text.lower())
-        concepts.extend(technical_terms)
+            # Check for capitalization (heuristic for concept)
+            if len(clean_chunk) > 3 and clean_chunk[0].isupper():
+                candidates.append(clean_chunk)
 
-        # Deduplicate while preserving order
-        seen = set()
-        unique_concepts = []
-        for c in concepts:
-            if c.lower() not in seen:
-                seen.add(c.lower())
-                unique_concepts.append(c)
+        # Count and filter
+        concept_counts = Counter(candidates)
+        valid_concepts = [c for c, count in concept_counts.items() if count >= min_freq]
+        
+        # Sort by frequency then length
+        valid_concepts.sort(key=lambda x: (concept_counts[x], len(x)), reverse=True)
+        
+        return valid_concepts[:50]
 
-        return unique_concepts[:100]  # Limit to top 100
+    def _parse_agtype(self, value):
+        if value is None:
+            return None
+        return value
 
-    def _extract_technical_terms(self, text: str) -> List[str]:
-        """Extract common technical/programming terms"""
-        # Domain-specific term dictionary
-        # In production, load from external file or use NER model
-        technical_terms = {
-            # Programming fundamentals
-            "algorithm", "data structure", "variable", "function", "class",
-            "object", "method", "loop", "array", "string", "integer", "boolean",
-            "recursion", "iteration", "conditional", "operator", "expression",
-
-            # OOP concepts
-            "inheritance", "polymorphism", "encapsulation", "abstraction",
-            "interface", "constructor", "destructor", "overloading", "overriding",
-
-            # Data structures
-            "linked list", "stack", "queue", "tree", "binary tree", "heap",
-            "hash table", "graph", "trie", "set", "map", "dictionary",
-
-            # Algorithms
-            "sorting", "searching", "dynamic programming", "greedy algorithm",
-            "divide and conquer", "backtracking", "breadth first search",
-            "depth first search", "binary search", "merge sort", "quick sort",
-
-            # Web development
-            "api", "rest", "http", "html", "css", "javascript", "typescript",
-            "react", "angular", "vue", "node", "express", "database",
-
-            # Machine learning
-            "neural network", "machine learning", "deep learning",
-            "supervised learning", "unsupervised learning", "reinforcement learning",
-            "classification", "regression", "clustering", "feature extraction",
-
-            # Databases
-            "sql", "nosql", "query", "index", "transaction", "normalization",
-            "primary key", "foreign key", "join", "aggregation",
-
-            # Software engineering
-            "design pattern", "singleton", "factory", "observer", "decorator",
-            "testing", "unit test", "integration test", "debugging", "refactoring",
-            "version control", "git", "agile", "scrum", "continuous integration"
-        }
-
-        found_terms = []
-        for term in technical_terms:
-            if term in text:
-                # Convert to title case for consistency
-                found_terms.append(term.title())
-
-        return found_terms
-
-
-# Global instance
-graph_service = AsyncGraphService()
-
-
-async def get_graph_service() -> AsyncGraphService:
-    """Dependency injection for graph service"""
-    await graph_service.ensure_connected()
-    return graph_service
+# Dependency Injection
+async def get_graph_service(db: AsyncSession = Depends(get_db)):
+    return AsyncGraphService(db)

@@ -42,23 +42,49 @@ def build_course_graph(self, course_id: int, course_title: str):
         # and we're just building the graph from stored concepts
 
         graph_service = GraphService()
+        vector_store = VectorStoreService(use_cache=False)
 
-        # This is a placeholder - in production, we'd:
-        # 1. Query database for all modules in course
-        # 2. Get their extracted concepts
-        # 3. Build the graph
+        modules_data = []
+        try:
+            with graph_service.get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT id, title FROM modules WHERE course_id = %s ORDER BY \"order\"", (course_id,))
+                    rows = cur.fetchall()
+                    
+                    for row in rows:
+                        m_id, m_title = row
+                        # Get chunks
+                        chunks = vector_store.get_module_chunks(m_id)
+                        if chunks:
+                            # Extract concepts from full text of module
+                            full_text = " ".join([c["text"] for c in chunks])
+                            concepts = graph_service.extract_concepts(full_text)
+                            
+                            modules_data.append({
+                                "id": m_id,
+                                "title": m_title,
+                                "concepts": concepts
+                            })
+                            logger.info(f"Extracted {len(concepts)} concepts for module {m_id}")
+            
+            self.update_state(
+                state="PROCESSING", meta={"step": f"Constructing graph for {len(modules_data)} modules", "retry_count": retry_count}
+            )
+            
+            if modules_data:
+                graph_service.create_course_graph(course_id, course_title, modules_data)
+                graph_service.detect_prerequisites(course_id)
+            else:
+                 logger.warning(f"No modules found for course {course_id}")
 
-        self.update_state(
-            state="PROCESSING", meta={"step": "Constructing knowledge graph", "retry_count": retry_count}
-        )
-
-        # Close connection
-        graph_service.close()
+        finally:
+            graph_service.close()
 
         return {
             "status": "success",
             "message": "Knowledge graph built successfully",
             "course_id": course_id,
+            "modules_processed": len(modules_data),
             "retries_used": retry_count,
         }
 
@@ -106,8 +132,7 @@ def update_concept_relationships(self, course_id: int):
         graph_service = GraphService()
 
         # Re-detect prerequisites
-        with graph_service.driver.session() as session:
-            graph_service._detect_prerequisites(session, course_id)
+        graph_service.detect_prerequisites(course_id)
 
         graph_service.close()
 

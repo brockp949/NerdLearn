@@ -15,7 +15,7 @@ import type {
   ConceptDetails,
   LearningPathItem,
   GraphStats,
-  DifficultyLevel,
+  CurriculumDifficulty as DifficultyLevel,
   LearningStyle,
 } from "@/types/curriculum";
 

@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, and_, func, desc
 from sqlalchemy.orm import selectinload
-from typing import List, Optional
+from typing import List, Optional, Dict
 from pydantic import BaseModel, Field
 from datetime import datetime, timedelta
 import secrets
@@ -29,6 +29,15 @@ from app.models.social import (
     study_group_members,
 )
 from app.models.user import User
+
+from app.services.social_agent_service import SocialAgentService
+from app.schemas.social_agent import (
+    CodingChallenge, EvaluationResult, EvaluationRequest, HintRequest, HintResponse,
+    StartDebateRequest, AdvanceDebateRequest, DebateSessionResponse, DebateRoundResponse, DebateSummary,
+    TeachingSessionStartRequest, ExplanationRequest, TeachingResponse, TeachingSessionSummary, TeachingSessionResponse
+)
+
+agent_service = SocialAgentService()
 
 router = APIRouter()
 
@@ -831,7 +840,7 @@ async def send_group_message(
 
 @router.get("/leaderboard/global", response_model=List[LeaderboardEntry])
 async def get_global_leaderboard(
-    period: str = Query(default="weekly", regex="^(daily|weekly|monthly|all_time)$"),
+    period: str = Query(default="weekly", pattern="^(daily|weekly|monthly|all_time)$"),
     limit: int = Query(default=10, le=100),
     db: AsyncSession = Depends(get_db),
 ):
@@ -1002,3 +1011,108 @@ async def get_friends_activity(
         }
         for a in activities
     ]
+
+
+# ==================== Agentic Social Features ====================
+
+# --- Coding Challenges ---
+
+@router.post("/challenges/init")
+async def init_sample_challenges(
+    current_user_id: int = Query(...),
+):
+    """Initialize sample coding challenges (mock)."""
+    return {"message": "Sample challenges initialized"}
+
+@router.get("/coding-challenges", response_model=Dict[str, List[CodingChallenge]])
+async def list_coding_challenges(
+    current_user_id: int = Query(...),
+):
+    """List available AI coding challenges."""
+    challenges = await agent_service.get_challenges()
+    return {"challenges": challenges}
+
+@router.get("/coding-challenges/{challenge_id}", response_model=CodingChallenge)
+async def get_coding_challenge(
+    challenge_id: str,
+    current_user_id: int = Query(...),
+):
+    """Get details for a specific coding challenge."""
+    challenge = await agent_service.get_challenge(challenge_id)
+    if not challenge:
+        raise HTTPException(status_code=404, detail="Challenge not found")
+    return challenge
+
+@router.post("/challenges/evaluate", response_model=EvaluationResult)
+async def evaluate_code_submission(
+    request: EvaluationRequest,
+):
+    """Evaluate code submission using AI agent."""
+    return await agent_service.evaluate_code(request.challenge_id, request.code)
+
+@router.post("/challenges/hint", response_model=HintResponse)
+async def get_challenge_hint(
+    request: HintRequest,
+):
+    """Get a contextual hint for the current code."""
+    hint_text = await agent_service.get_hint(request.challenge_id, request.code, request.hint_level)
+    return HintResponse(
+        hint_level=request.hint_level,
+        hint=hint_text,
+        cost=10 # Mock cost
+    )
+
+# --- Debates ---
+
+@router.post("/debates/start", response_model=DebateSessionResponse)
+async def start_debate(
+    request: StartDebateRequest,
+):
+    """Start a new multi-agent debate session."""
+    return await agent_service.start_debate(
+        request.topic, 
+        request.format, 
+        request.panel_preset, 
+        request.max_rounds
+    )
+
+@router.post("/debates/advance", response_model=DebateRoundResponse)
+async def advance_debate(
+    request: AdvanceDebateRequest,
+):
+    """Advance the debate to the next round."""
+    return await agent_service.advance_debate(request.session_id, request.learner_contribution)
+
+@router.get("/debates/{session_id}/summary", response_model=DebateSummary)
+async def get_debate_summary(
+    session_id: str,
+):
+    """Get the summary of a completed debate."""
+    return await agent_service.get_debate_summary(session_id)
+
+# --- Teaching ---
+
+@router.post("/teaching/start", response_model=TeachingSessionResponse)
+async def start_teaching_session(
+    request: TeachingSessionStartRequest,
+):
+    """Start a new teaching session (Feynman Technique)."""
+    return await agent_service.start_teaching_session(
+        request.user_id, 
+        request.concept_name, 
+        request.persona
+    )
+
+@router.post("/teaching/explain", response_model=TeachingResponse)
+async def submit_explanation(
+    request: ExplanationRequest,
+):
+    """Submit an explanation to the student agent."""
+    return await agent_service.submit_explanation(request.session_id, request.explanation)
+
+@router.post("/teaching/{session_id}/end", response_model=TeachingSessionSummary)
+async def end_teaching_session(
+    session_id: str,
+):
+    """End the teaching session and get feedback."""
+    return await agent_service.end_teaching_session(session_id)

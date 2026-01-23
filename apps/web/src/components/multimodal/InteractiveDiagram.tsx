@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
 import { ZoomIn, ZoomOut, Maximize2, Download, RefreshCw, Eye, EyeOff } from "lucide-react";
 import type { DiagramData, DiagramNode, DiagramEdge } from "@/types/multimodal";
+import type { Node, Edge } from 'reactflow';
 
 // Dynamically import ReactFlow to avoid SSR issues
 const ReactFlow = dynamic(
@@ -117,8 +118,11 @@ export function InteractiveDiagram({
   const [showLabels, setShowLabels] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
+
+
+
   // Convert diagram data to ReactFlow format
-  const nodes = useMemo(() => {
+  const nodes: Node[] = useMemo(() => {
     return diagram.nodes.map((node) => ({
       id: node.id,
       type: "default",
@@ -133,7 +137,7 @@ export function InteractiveDiagram({
     }));
   }, [diagram.nodes, selectedNode, showLabels, interactive]);
 
-  const edges = useMemo(() => {
+  const edges: Edge[] = useMemo(() => {
     return diagram.edges.map((edge) => ({
       id: edge.id,
       source: edge.source,
@@ -152,9 +156,9 @@ export function InteractiveDiagram({
       },
       markerEnd: edge.markerEnd
         ? {
-            type: "arrowclosed" as const,
-            color: "rgba(139, 92, 246, 0.7)",
-          }
+          type: "arrowclosed" as any, // Cast to any or MarkerType if imported
+          color: "rgba(139, 92, 246, 0.7)",
+        }
         : undefined,
     }));
   }, [diagram.edges]);
@@ -216,9 +220,8 @@ export function InteractiveDiagram({
 
   return (
     <div
-      className={`relative rounded-xl border border-white/10 bg-black/40 overflow-hidden ${className} ${
-        isFullscreen ? "fixed inset-4 z-50" : ""
-      }`}
+      className={`relative rounded-xl border border-white/10 bg-black/40 overflow-hidden ${className} ${isFullscreen ? "fixed inset-4 z-50" : ""
+        }`}
     >
       {/* Header */}
       <div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-4 py-2 bg-gradient-to-b from-black/80 to-transparent">
