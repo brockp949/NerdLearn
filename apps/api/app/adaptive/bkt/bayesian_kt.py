@@ -1,17 +1,28 @@
 """
-Bayesian Knowledge Tracing (BKT)
+Bayesian Knowledge Tracing (BKT) with Temporal Difference Extension (TD-BKT)
 Probabilistic model for tracking knowledge mastery over time
 
-Parameters:
+Standard BKT Parameters:
 - P(L0): Prior probability of knowing the skill
 - P(T): Probability of learning (transition)
 - P(G): Probability of guessing correctly when not knowing
 - P(S): Probability of slip (error when knowing)
 
+TD-BKT Extension (from research):
+- Uses behavioral telemetry signals for continuous knowledge updates
+- Integrates frustration, engagement, and time signals
+- Enables stealth assessment without explicit quizzes
+
 Formula:
 P(Lt) = P(Lt-1 | evidence) + (1 - P(Lt-1 | evidence)) * P(T)
+
+TD Update:
+δ = r + γ * V(s') - V(s)
+V(s) ← V(s) + α * δ
 """
 from typing import Dict, Tuple, Optional, List
+from dataclasses import dataclass
+from enum import Enum
 import math
 
 
@@ -257,5 +268,316 @@ class BayesianKnowledgeTracer:
         # Update params dict
         self.params["p_g"] = self.p_g
         self.params["p_s"] = self.p_s
-        
+
         return self.params
+
+
+class AffectState(str, Enum):
+    """Affect states from telemetry (matches telemetry-tracker.ts)"""
+    FLOW = "flow"
+    FRUSTRATED = "frustrated"
+    BORED = "bored"
+    CONFUSED = "confused"
+    NEUTRAL = "neutral"
+
+
+@dataclass
+class TelemetrySignal:
+    """Telemetry signal for TD-BKT updates"""
+    affect_state: AffectState
+    frustration_score: float  # 0-1
+    engagement_score: float   # 0-1 (derived from activity)
+    time_on_task: float       # seconds
+    scroll_depth: float       # 0-100 percentage
+    idle_time_ratio: float    # 0-1 ratio of idle to active time
+
+
+class TDBKT(BayesianKnowledgeTracer):
+    """
+    Temporal Difference Bayesian Knowledge Tracing (TD-BKT)
+
+    Research alignment: Combines BKT with temporal difference learning
+    to update knowledge estimates using continuous behavioral signals
+    from telemetry (frustration, engagement, time patterns) without
+    requiring explicit assessment.
+
+    Key innovations:
+    1. Real-time knowledge estimation from behavioral signals
+    2. Affect-aware learning rate adjustment
+    3. Signal-to-evidence mapping for stealth assessment
+    """
+
+    # Telemetry signal weights for evidence computation
+    SIGNAL_WEIGHTS = {
+        "affect": 0.30,        # Affect state contribution
+        "engagement": 0.25,    # Engagement level
+        "frustration": 0.25,   # Inverse frustration (confusion indicator)
+        "time_quality": 0.20,  # Time spent quality
+    }
+
+    # Affect state to learning signal mapping
+    AFFECT_LEARNING_SIGNALS = {
+        AffectState.FLOW: 0.85,       # High learning signal
+        AffectState.NEUTRAL: 0.50,    # Baseline
+        AffectState.CONFUSED: 0.30,   # Struggling but engaged
+        AffectState.BORED: 0.20,      # Disengaged - low learning
+        AffectState.FRUSTRATED: 0.10, # Blocked - minimal learning
+    }
+
+    def __init__(
+        self,
+        params: Optional[Dict[str, float]] = None,
+        td_learning_rate: float = 0.1,
+        discount_factor: float = 0.9
+    ):
+        """
+        Initialize TD-BKT
+
+        Args:
+            params: BKT parameters
+            td_learning_rate: TD learning rate (alpha)
+            discount_factor: TD discount factor (gamma)
+        """
+        super().__init__(params)
+        self.alpha = td_learning_rate
+        self.gamma = discount_factor
+        self._value_estimates: Dict[str, float] = {}  # concept_id -> value
+
+    def telemetry_to_evidence(self, signal: TelemetrySignal) -> float:
+        """
+        Convert telemetry signal to evidence score for BKT update.
+
+        Research alignment: Maps behavioral signals to knowledge evidence
+        using a weighted combination of affect, engagement, and time metrics.
+
+        Args:
+            signal: Telemetry signal from client
+
+        Returns:
+            Evidence score (0-1) for knowledge estimation
+        """
+        # Affect component
+        affect_signal = self.AFFECT_LEARNING_SIGNALS.get(signal.affect_state, 0.5)
+
+        # Engagement component (inverse of idle time ratio)
+        engagement_signal = signal.engagement_score
+
+        # Frustration component (inverse - low frustration = good)
+        frustration_signal = 1.0 - signal.frustration_score
+
+        # Time quality component
+        # Optimal time on task varies, but we assume 30-300 seconds is good
+        if signal.time_on_task < 10:
+            time_signal = 0.2  # Too fast - likely skipped
+        elif signal.time_on_task < 30:
+            time_signal = 0.5  # Quick review
+        elif signal.time_on_task < 300:
+            time_signal = 0.8  # Good engagement
+        else:
+            time_signal = 0.4  # Too long - might be stuck
+
+        # Scroll depth bonus (reading through content)
+        scroll_bonus = min(signal.scroll_depth / 100, 1.0) * 0.2
+
+        # Weighted combination
+        evidence = (
+            self.SIGNAL_WEIGHTS["affect"] * affect_signal +
+            self.SIGNAL_WEIGHTS["engagement"] * engagement_signal +
+            self.SIGNAL_WEIGHTS["frustration"] * frustration_signal +
+            self.SIGNAL_WEIGHTS["time_quality"] * (time_signal + scroll_bonus)
+        )
+
+        return max(0.0, min(1.0, evidence))
+
+    def td_update(
+        self,
+        concept_id: str,
+        current_mastery: float,
+        signal: TelemetrySignal,
+        next_mastery_estimate: Optional[float] = None
+    ) -> Tuple[float, Dict]:
+        """
+        Perform temporal difference update on knowledge estimate.
+
+        Research alignment: TD(0) learning applied to knowledge tracing:
+        - State: Current mastery estimate
+        - Reward: Evidence from telemetry signals
+        - Transition: BKT learning dynamics
+
+        Args:
+            concept_id: Concept being learned
+            current_mastery: Current P(L)
+            signal: Telemetry signal
+            next_mastery_estimate: Optional next state estimate
+
+        Returns:
+            (Updated mastery, TD update details)
+        """
+        # Convert telemetry to evidence
+        evidence = self.telemetry_to_evidence(signal)
+
+        # Get or initialize value estimate
+        if concept_id not in self._value_estimates:
+            self._value_estimates[concept_id] = current_mastery
+
+        current_value = self._value_estimates[concept_id]
+
+        # Compute TD target (reward + discounted next value)
+        # Reward is the evidence signal (interpreted as learning success)
+        reward = evidence
+
+        # Next value estimate
+        if next_mastery_estimate is not None:
+            next_value = next_mastery_estimate
+        else:
+            # Estimate next value using BKT transition
+            next_value = current_value + (1 - current_value) * self.p_t
+
+        # TD error: δ = r + γ * V(s') - V(s)
+        td_error = reward + self.gamma * next_value - current_value
+
+        # Update value estimate: V(s) ← V(s) + α * δ
+        new_value = current_value + self.alpha * td_error
+        new_value = max(0.0, min(1.0, new_value))
+
+        # Store updated value
+        self._value_estimates[concept_id] = new_value
+
+        # Also perform BKT update with evidence
+        bkt_mastery, bkt_details = self.update_from_evidence(current_mastery, evidence)
+
+        # Combine TD and BKT estimates (weighted average)
+        combined_mastery = 0.6 * new_value + 0.4 * bkt_mastery
+
+        update_details = {
+            "concept_id": concept_id,
+            "prior_mastery": current_mastery,
+            "evidence_from_telemetry": evidence,
+            "td_error": td_error,
+            "td_value_estimate": new_value,
+            "bkt_mastery": bkt_mastery,
+            "combined_mastery": combined_mastery,
+            "affect_state": signal.affect_state.value,
+            "frustration_score": signal.frustration_score,
+            "engagement_score": signal.engagement_score,
+        }
+
+        return combined_mastery, update_details
+
+    def update_from_telemetry(
+        self,
+        concept_id: str,
+        current_mastery: float,
+        affect_state: str,
+        frustration_score: float,
+        engagement_score: float = 0.5,
+        time_on_task: float = 60.0,
+        scroll_depth: float = 50.0,
+        idle_time_ratio: float = 0.2
+    ) -> Tuple[float, Dict]:
+        """
+        Convenience method to update mastery from raw telemetry values.
+
+        Args:
+            concept_id: Concept being learned
+            current_mastery: Current mastery estimate
+            affect_state: String affect state from telemetry
+            frustration_score: Frustration index (0-1)
+            engagement_score: Derived engagement (0-1)
+            time_on_task: Seconds on current content
+            scroll_depth: Percentage scrolled (0-100)
+            idle_time_ratio: Ratio of idle time (0-1)
+
+        Returns:
+            (Updated mastery, update details)
+        """
+        # Parse affect state
+        try:
+            affect = AffectState(affect_state)
+        except ValueError:
+            affect = AffectState.NEUTRAL
+
+        # Build signal
+        signal = TelemetrySignal(
+            affect_state=affect,
+            frustration_score=frustration_score,
+            engagement_score=engagement_score,
+            time_on_task=time_on_task,
+            scroll_depth=scroll_depth,
+            idle_time_ratio=idle_time_ratio
+        )
+
+        return self.td_update(concept_id, current_mastery, signal)
+
+    def get_intervention_recommendation(
+        self,
+        mastery: float,
+        signal: TelemetrySignal
+    ) -> Dict[str, any]:
+        """
+        Recommend intervention based on mastery and telemetry.
+
+        Research alignment: Real-time micro-interventions triggered
+        by behavioral signals, not just mastery thresholds.
+
+        Args:
+            mastery: Current mastery estimate
+            signal: Current telemetry signal
+
+        Returns:
+            Intervention recommendation with type and urgency
+        """
+        recommendations = {
+            "should_intervene": False,
+            "intervention_type": None,
+            "urgency": "low",
+            "message": None
+        }
+
+        # High frustration intervention
+        if signal.frustration_score > 0.7:
+            recommendations["should_intervene"] = True
+            recommendations["intervention_type"] = "simplify"
+            recommendations["urgency"] = "high"
+            recommendations["message"] = "Consider providing a simpler explanation or hint"
+
+        # Confusion intervention
+        elif signal.affect_state == AffectState.CONFUSED and mastery < 0.5:
+            recommendations["should_intervene"] = True
+            recommendations["intervention_type"] = "scaffold"
+            recommendations["urgency"] = "medium"
+            recommendations["message"] = "Provide step-by-step guidance"
+
+        # Boredom intervention (might be too easy)
+        elif signal.affect_state == AffectState.BORED:
+            if mastery > 0.7:
+                recommendations["should_intervene"] = True
+                recommendations["intervention_type"] = "challenge"
+                recommendations["urgency"] = "low"
+                recommendations["message"] = "Increase difficulty or move to next concept"
+            else:
+                recommendations["should_intervene"] = True
+                recommendations["intervention_type"] = "engage"
+                recommendations["urgency"] = "medium"
+                recommendations["message"] = "Try interactive exercise or different modality"
+
+        # Flow state - no intervention needed, but track for positive reinforcement
+        elif signal.affect_state == AffectState.FLOW:
+            recommendations["intervention_type"] = "none"
+            recommendations["message"] = "Learner in flow state - maintain current approach"
+
+        # Stuck too long intervention
+        elif signal.time_on_task > 300 and signal.idle_time_ratio > 0.5:
+            recommendations["should_intervene"] = True
+            recommendations["intervention_type"] = "prompt"
+            recommendations["urgency"] = "medium"
+            recommendations["message"] = "Check if learner needs help"
+
+        return recommendations
+
+    def reset_value_estimates(self, concept_id: Optional[str] = None):
+        """Reset TD value estimates"""
+        if concept_id:
+            self._value_estimates.pop(concept_id, None)
+        else:
+            self._value_estimates.clear()
