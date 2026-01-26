@@ -416,6 +416,31 @@ export class TelemetryClient {
     }
 
     /**
+     * Report session metrics to Analytics API
+     */
+    async reportSessionMetrics(metrics: { total_dwell_ms: number, valid_dwell_ms: number, engagement_score: number }) {
+        try {
+            // Use fetch to post to API
+            await fetch('/api/analytics/metrics/session', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    user_id: 1, // TODO: Get actual user ID from auth context or config
+                    session_id: this.sessionId,
+                    total_dwell_ms: metrics.total_dwell_ms,
+                    valid_dwell_ms: metrics.valid_dwell_ms,
+                    engagement_score: metrics.engagement_score
+                })
+            })
+            console.log('📊 Session metrics reported')
+        } catch (error) {
+            console.error('Failed to report session metrics:', error)
+        }
+    }
+
+    /**
      * Check if connected
      */
     isConnected(): boolean {

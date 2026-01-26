@@ -1,18 +1,14 @@
 "use client"
 
 import React, { useEffect, useState } from "react"
-import { useTelemetry, Intervention } from "@/lib/telemetry"
+import { useTelemetryContext } from "@/components/providers/telemetry-provider"
+import { Intervention } from "@/lib/telemetry"
 import { motion, AnimatePresence } from "framer-motion"
 import { X, Sparkles, MessageSquare } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-interface InterventionToastProps {
-    sessionId?: string
-    learnerId?: string
-}
-
-export function InterventionToast({ sessionId, learnerId }: InterventionToastProps) {
-    const { intervention } = useTelemetry(sessionId || "demo-session", learnerId || "demo-user")
+export function InterventionToast() {
+    const { intervention } = useTelemetryContext()
     const [isVisible, setIsVisible] = useState(false)
     const [currentIntervention, setCurrentIntervention] = useState<Intervention | null>(null)
 

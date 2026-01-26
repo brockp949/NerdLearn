@@ -3,7 +3,7 @@ Vector Store Service for API
 Manages similarity search using pgvector
 """
 from typing import List, Dict, Any, Optional
-import openai
+from openai import AsyncOpenAI
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
@@ -17,13 +17,14 @@ class VectorStoreService:
         self.db = db
         self.vector_size = settings.VECTOR_SIZE
         self.embedding_model = settings.EMBEDDING_MODEL
-        openai.api_key = settings.OPENAI_API_KEY
+        self.client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
-    def embed_text(self, text: str) -> List[float]:
+    async def embed_text(self, text: str) -> List[float]:
         """Wrapper for single text embedding"""
-        return self.embed_texts([text])[0]
+        embeddings = await self.embed_texts([text])
+        return embeddings[0]
 
-    def embed_texts(self, texts: List[str]) -> List[List[float]]:
+    async def embed_texts(self, texts: List[str]) -> List[List[float]]:
         """Generate embeddings for a batch of texts using OpenAI"""
         if not texts:
             return []
@@ -34,8 +35,8 @@ class VectorStoreService:
             return [[0.0] * self.vector_size for _ in texts]
 
         try:
-            # Efficient batch call
-            response = openai.embeddings.create(input=texts, model=self.embedding_model)
+            # Efficient batch call - now async
+            response = await self.client.embeddings.create(input=texts, model=self.embedding_model)
             # Ensure order is preserved
             return [data.embedding for data in response.data]
         except Exception as e:
@@ -51,7 +52,7 @@ class VectorStoreService:
     ) -> List[Dict[str, Any]]:
         """Search for similar chunks in pgvector"""
         # Generate query embedding
-        query_vector = self.embed_text(query)
+        query_vector = await self.embed_text(query)
 
         # Build query
         # Use l2_distance or cosine_distance (<=>)
@@ -89,7 +90,7 @@ class VectorStoreService:
         limit: int = 3
     ) -> List[Dict[str, Any]]:
         """Search specifically for community summaries using pgvector"""
-        query_vector = self.embed_text(query)
+        query_vector = await self.embed_text(query)
         
         # Build query for summaries
         stmt = select(CourseChunk)\
@@ -131,7 +132,7 @@ class VectorStoreService:
             texts = [doc["text"] for doc in batch]
             
             # Batch embedding generation
-            embeddings = self.embed_texts(texts)
+            embeddings = await self.embed_texts(texts)
             
             for j, doc in enumerate(batch):
                 doc_id = doc.get("id") or str(uuid.uuid4())

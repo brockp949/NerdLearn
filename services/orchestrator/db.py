@@ -5,9 +5,8 @@ Uses psycopg2 to directly connect to PostgreSQL since Prisma is TypeScript-based
 Provides CRUD operations for cards, learner profiles, and learning sessions.
 """
 
-import psycopg2
-from psycopg2.extras import RealDictCursor
-from psycopg2.pool import ThreadedConnectionPool
+import asyncpg
+import asyncio
 from typing import List, Dict, Optional, Any
 from datetime import datetime
 import json
@@ -19,430 +18,251 @@ DATABASE_URL = os.getenv(
     "postgresql://nerdlearn:nerdlearn_dev_password@localhost:5432/nerdlearn"
 )
 
-
 class Database:
-    """Database access layer for Orchestrator service"""
+    """Async Database access layer for Orchestrator service via asyncpg"""
 
     def __init__(self):
-        # Create connection pool (min 1, max 10 connections)
-        self.pool = ThreadedConnectionPool(
-            minconn=1,
-            maxconn=10,
-            dsn=DATABASE_URL
-        )
+        self.pool: Optional[asyncpg.Pool] = None
 
-    def get_connection(self):
-        """Get a connection from the pool"""
-        return self.pool.getconn()
+    async def connect(self):
+        """Initialize the connection pool"""
+        if not self.pool:
+            try:
+                self.pool = await asyncpg.create_pool(
+                    dsn=DATABASE_URL,
+                    min_size=1,
+                    max_size=10
+                )
+                print("✅ Database connection pool created", flush=True)
+            except Exception as e:
+                print(f"❌ Failed to connect to database: {e}", flush=True)
+                raise
 
-    def return_connection(self, conn):
-        """Return a connection to the pool"""
-        self.pool.putconn(conn)
+    async def disconnect(self):
+        """Close the connection pool"""
+        if self.pool:
+            await self.pool.close()
+            print("Database connection pool closed", flush=True)
 
-    def load_cards(self, card_ids: List[str]) -> List[Dict[str, Any]]:
-        """
-        Load cards from PostgreSQL by IDs.
-
-        Args:
-            card_ids: List of card IDs to load
-
-        Returns:
-            List of card dictionaries with concept information
-        """
+    async def load_cards(self, card_ids: List[str]) -> List[Dict[str, Any]]:
+        """Load cards (Resources) from PostgreSQL by IDs"""
         if not card_ids:
             return []
+        
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch("""
+                SELECT
+                    r.id as card_id,
+                    r."conceptId",
+                    r."contentData"->>'content' as content,
+                    r."contentData"->>'question' as question,
+                    r."contentData"->>'correctAnswer' as correct_answer,
+                    r.difficulty,
+                    r."contentData"->>'cardType' as card_type,
+                    con.name as concept_name,
+                    con.domain,
+                    con."taxonomyLevel" as bloom_level
+                FROM "Resource" r
+                JOIN "Concept" con ON r."conceptId" = con.id
+                WHERE r.id = ANY($1)
+            """, card_ids)
+            return [dict(row) for row in rows]
 
-        conn = self.get_connection()
-        try:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute("""
-                    SELECT
-                        c.id as card_id,
-                        c."conceptId",
-                        c.content,
-                        c.question,
-                        c."correctAnswer" as correct_answer,
-                        c.difficulty,
-                        c."cardType" as card_type,
-                        con.name as concept_name,
-                        con.domain,
-                        con."bloomLevel" as bloom_level
-                    FROM "Card" c
-                    JOIN "Concept" con ON c."conceptId" = con.id
-                    WHERE c.id = ANY(%s)
-                """, (card_ids,))
-                cards = cur.fetchall()
-                # Convert RealDictRow to regular dicts
-                return [dict(card) for card in cards]
-        finally:
-            self.return_connection(conn)
+    async def load_learner_profile(self, learner_id: str) -> Optional[Dict[str, Any]]:
+        """Load learner profile"""
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow("""
+                SELECT
+                    lp.id,
+                    lp."userId",
+                    lp."cognitiveEmbedding",
+                    lp."fsrsStability",
+                    lp."fsrsDifficulty",
+                    lp."currentZpdLower",
+                    lp."currentZpdUpper",
+                    lp."totalXP",
+                    lp.level,
+                    lp."streakDays",
+                    lp."lastActivityDate" as "lastReviewDate"
+                FROM "LearnerProfile" lp
+                WHERE lp."userId" = $1
+            """, learner_id)
+            return dict(row) if row else None
 
-    def load_learner_profile(self, learner_id: str) -> Optional[Dict[str, Any]]:
-        """
-        Load learner profile with FSRS parameters and gamification data.
-
-        Args:
-            learner_id: User ID
-
-        Returns:
-            Learner profile dictionary or None if not found
-        """
-        conn = self.get_connection()
-        try:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute("""
-                    SELECT
-                        lp.id,
-                        lp."userId",
-                        lp."cognitiveEmbedding",
-                        lp."fsrsStability",
-                        lp."fsrsDifficulty",
-                        lp."currentZpdLower",
-                        lp."currentZpdUpper",
-                        lp."totalXP",
-                        lp.level,
-                        lp."streakDays",
-                        lp."lastReviewDate"
-                    FROM "LearnerProfile" lp
-                    WHERE lp."userId" = %s
-                """, (learner_id,))
-                profile = cur.fetchone()
-                return dict(profile) if profile else None
-        finally:
-            self.return_connection(conn)
-
-
-    def create_learner_profile(self, user_id: str) -> Dict[str, Any]:
+    async def create_learner_profile(self, user_id: str) -> Dict[str, Any]:
         """Create a new learner profile"""
         print(f"DEBUG: creating learner profile for {user_id}", flush=True)
-        return {"id": "mock_id", "userId": user_id, "streakDays": 0, "totalXP": 0}
-        # conn = self.get_connection()
-        # print("DEBUG: Got connection", flush=True)
-        # try:
-        #     with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        #         # Create dummy cognitive embedding (assuming 768 or 384 dims, using 384 generic)
-        #         dummy_embedding = [0.0] * 384
-        #         print("DEBUG: Executing INSERT", flush=True)
-        #
-        #         cur.execute("""
-        #             INSERT INTO "LearnerProfile"
-        #             ("id", "userId", "totalXP", "level", "streakDays", 
-        #              "fsrsStability", "fsrsDifficulty", "cognitiveEmbedding", 
-        #              "currentZpdLower", "currentZpdUpper", "createdAt", "updatedAt")
-        #             VALUES (%s, %s, 0, 1, 0, 0.5, 0.5, %s, 0.3, 0.7, NOW(), NOW())
-        #             ON CONFLICT ("userId") DO NOTHING
-        #             RETURNING *
-        #         """, (str(uuid.uuid4()), user_id, json.dumps(dummy_embedding)))
-        #         result = cur.fetchone()
-        #         conn.commit()
-        #         if result:
-        #             return dict(result)
-        #         return self.load_learner_profile(user_id)
-        # finally:
-        #     self.return_connection(conn)
+        async with self.pool.acquire() as conn:
+            # Ensure User exists (for test seeding)
+            try:
+                await conn.execute("""
+                    INSERT INTO "User" ("id", "email", "username", "passwordHash", "updatedAt")
+                    VALUES ($1, $2, $3, 'test_hash_123', NOW())
+                """, user_id, f"{user_id}@test.com", user_id)
+            except asyncpg.UniqueViolationError:
+                pass
 
-    def create_card(self, card_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Create a card for testing"""
-        conn = self.get_connection()
-        try:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                # First ensure concept exists
-                cur.execute("""
-                    INSERT INTO "Concept" ("name", "domain")
-                    VALUES (%s, 'Test Domain')
-                    ON CONFLICT DO NOTHING
-                    RETURNING id
-                """, (card_data["concept_name"],))
-                concept = cur.fetchone()
-                
-                # Get concept ID (either new or existing)
-                if not concept:
-                    cur.execute('SELECT id FROM "Concept" WHERE name = %s', (card_data["concept_name"],))
-                    concept = cur.fetchone()
-                
-                concept_id = concept["id"]
+            # Create dummy cognitive embedding (assuming 384 generic)
+            dummy_embedding = [0.0] * 384
+            
+            row = await conn.fetchrow("""
+                INSERT INTO "LearnerProfile"
+                ("id", "userId", "totalXP", "level", "streakDays", 
+                    "fsrsStability", "fsrsDifficulty", "cognitiveEmbedding", 
+                    "currentZpdLower", "currentZpdUpper", "createdAt", "updatedAt")
+                VALUES ($1, $2, 0, 1, 0, 0.5, 0.5, $3, 0.3, 0.7, NOW(), NOW())
+                ON CONFLICT ("userId") DO NOTHING
+                RETURNING *
+            """, str(uuid.uuid4()), user_id, json.dumps(dummy_embedding))
+            
+            if row:
+                return dict(row)
+            return await self.load_learner_profile(user_id)
 
-                cur.execute("""
-                    INSERT INTO "Card"
-                    ("id", "conceptId", "content", "question", "correctAnswer", 
-                     "difficulty", "cardType", "createdAt", "updatedAt")
-                    VALUES (%s, %s, %s, %s, %s, %s, 'FLASHCARD', NOW(), NOW())
-                    RETURNING id
-                """, (
-                    str(uuid.uuid4()),
-                    concept_id,
-                    card_data["content"],
-                    card_data["question"],
-                    card_data.get("correct_answer"),
-                    card_data.get("difficulty", 0.5)
-                ))
-                card = cur.fetchone()
+    async def create_card(self, card_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a card (Resource) for testing"""
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                # Ensure concept exists
+                concept_id = await conn.fetchval('SELECT id FROM "Concept" WHERE name = $1', card_data["concept_name"])
                 
+                if not concept_id:
+                    concept_id = str(uuid.uuid4())
+                    await conn.execute("""
+                        INSERT INTO "Concept" ("id", "neoId", "name", "domain", "updatedAt")
+                        VALUES ($1, $2, $3, 'Test Domain', NOW())
+                    """, concept_id, f"neo_{concept_id}", card_data["concept_name"])
+
+                # Prepare contentData JSON
+                content_data = {
+                    "content": card_data["content"],
+                    "question": card_data["question"],
+                    "correctAnswer": card_data.get("correct_answer"),
+                    "cardType": "FLASHCARD"
+                }
+
+                card_id = await conn.fetchval("""
+                    INSERT INTO "Resource"
+                    ("id", "title", "type", "conceptId", "contentData", "difficulty", "createdAt", "updatedAt")
+                    VALUES ($1, $2, 'EXERCISE', $3, $4, $5, NOW(), NOW())
+                    RETURNING id
+                """, str(uuid.uuid4()), f"{card_data['concept_name']} Card", concept_id, 
+                   json.dumps(content_data), card_data.get("difficulty", 0.5))
+
                 # Schedule it
-                learner_id = card_data.get("learner_id") # Profile ID needed here
+                learner_id = card_data.get("learner_id")
                 if learner_id:
-                     cur.execute("""
+                    # ScheduledItem uses resourceId, not cardId
+                    # Schema has: learnerId, resourceId, dueDate, stability, difficulty, status
+                    await conn.execute("""
                         INSERT INTO "ScheduledItem"
-                        ("learnerId", "cardId", "nextDueDate", "currentStability", "currentDifficulty", "reviewCount")
-                        VALUES (%s, %s, NOW(), 2.5, 5.0, 0)
-                     """, (learner_id, card["id"]))
+                        ("id", "learnerId", "resourceId", "dueDate", "stability", "difficulty", "status", "updatedAt", "createdAt")
+                        VALUES ($1, $2, $3, NOW(), 2.5, 5.0, 'DUE', NOW(), NOW())
+                    """, str(uuid.uuid4()), learner_id, card_id)
+                
+                return {"card_id": card_id}
 
-                conn.commit()
-                return {"card_id": card["id"]}
-        finally:
-            self.return_connection(conn)
+    async def update_learner_xp(self, learner_id: str, xp_earned: int) -> Dict[str, Any]:
+        """Update learner's total XP"""
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow("""
+                UPDATE "LearnerProfile"
+                SET
+                    "totalXP" = "totalXP" + $1,
+                    "updatedAt" = NOW()
+                WHERE "userId" = $2
+                RETURNING "totalXP", level
+            """, xp_earned, learner_id)
+            return dict(row) if row else {"totalXP": 0, "level": 1}
 
-    def update_learner_xp(
-        self,
-        learner_id: str,
-        xp_earned: int
-    ) -> Dict[str, Any]:
-        """
-        Update learner's total XP and check for level up.
+    async def update_learner_level(self, learner_id: str, new_level: int):
+        """Update learner's level"""
+        async with self.pool.acquire() as conn:
+            await conn.execute("""
+                UPDATE "LearnerProfile"
+                SET level = $1, "updatedAt" = NOW()
+                WHERE "userId" = $2
+            """, new_level, learner_id)
 
-        Args:
-            learner_id: User ID
-            xp_earned: XP to add
+    async def update_streak(self, learner_id: str, streak_days: int):
+        """Update learner's streak days"""
+        async with self.pool.acquire() as conn:
+            await conn.execute("""
+                UPDATE "LearnerProfile"
+                SET
+                    "streakDays" = $1,
+                    "lastActivityDate" = NOW(),
+                    "updatedAt" = NOW()
+                WHERE "userId" = $2
+            """, streak_days, learner_id)
 
-        Returns:
-            Updated profile with new_total_xp and level
-        """
-        conn = self.get_connection()
-        try:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute("""
-                    UPDATE "LearnerProfile"
-                    SET
-                        "totalXP" = "totalXP" + %s,
-                        "updatedAt" = NOW()
-                    WHERE "userId" = %s
-                    RETURNING "totalXP", level
-                """, (xp_earned, learner_id))
-                result = cur.fetchone()
-                conn.commit()
-                return dict(result) if result else {"totalXP": 0, "level": 1}
-        finally:
-            self.return_connection(conn)
+    async def update_fsrs_params(self, learner_id: str, stability: float, difficulty: float):
+        """Update FSRS parameters"""
+        async with self.pool.acquire() as conn:
+            await conn.execute("""
+                UPDATE "LearnerProfile"
+                SET
+                    "fsrsStability" = $1,
+                    "fsrsDifficulty" = $2,
+                    "updatedAt" = NOW()
+                WHERE "userId" = $3
+            """, stability, difficulty, learner_id)
 
-    def update_learner_level(self, learner_id: str, new_level: int):
-        """
-        Update learner's level after level up.
+    async def create_evidence(self, learner_id: str, card_id: str, evidence_type: str, observable_data: Dict[str, Any]):
+        """Create an Evidence record - Simplified: Needs CompetencyState first"""
+        pass 
 
-        Args:
-            learner_id: User ID
-            new_level: New level number
-        """
-        conn = self.get_connection()
-        try:
-            with conn.cursor() as cur:
-                cur.execute("""
-                    UPDATE "LearnerProfile"
-                    SET
-                        level = %s,
-                        "updatedAt" = NOW()
-                    WHERE "userId" = %s
-                """, (new_level, learner_id))
-                conn.commit()
-        finally:
-            self.return_connection(conn)
+    async def update_competency_state(self, learner_id: str, concept_id: str, knowledge_probability: float, mastery_level: float):
+        """Update or create competency state"""
+        async with self.pool.acquire() as conn:
+            # Upsert
+            await conn.execute("""
+                INSERT INTO "CompetencyState"
+                ("id", "learnerId", "conceptId", "masteryProbability", "confidence", "updatedAt")
+                VALUES ($1, $2, $3, $4, 0.5, NOW())
+                ON CONFLICT ("learnerId", "conceptId") DO UPDATE SET
+                    "masteryProbability" = $4,
+                    "updatedAt" = NOW()
+            """, str(uuid.uuid4()), learner_id, concept_id, knowledge_probability)
 
-    def update_streak(self, learner_id: str, streak_days: int):
-        """
-        Update learner's streak days.
+    async def get_due_card_ids(self, learner_profile_id: str, limit: int = 20) -> List[str]:
+        """Get due card IDs (Resource IDs)"""
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch("""
+                SELECT "resourceId" as "cardId"
+                FROM "ScheduledItem"
+                WHERE "learnerId" = $1
+                    AND "dueDate" <= NOW()
+                ORDER BY "dueDate" ASC
+                LIMIT $2
+            """, learner_profile_id, limit)
+            return [row['cardId'] for row in rows]
 
-        Args:
-            learner_id: User ID
-            streak_days: New streak count
-        """
-        conn = self.get_connection()
-        try:
-            with conn.cursor() as cur:
-                cur.execute("""
-                    UPDATE "LearnerProfile"
-                    SET
-                        "streakDays" = %s,
-                        "lastReviewDate" = NOW(),
-                        "updatedAt" = NOW()
-                    WHERE "userId" = %s
-                """, (streak_days, learner_id))
-                conn.commit()
-        finally:
-            self.return_connection(conn)
+    async def get_scheduled_item(self, learner_profile_id: str, card_id: str) -> Optional[Dict[str, Any]]:
+        """Get scheduled item state"""
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow("""
+                SELECT
+                    id,
+                    "learnerId",
+                    "resourceId" as "cardId",
+                    "stability" as "currentStability",
+                    "difficulty" as "currentDifficulty",
+                    "stability",
+                    "difficulty",
+                    "dueDate" as "nextDueDate"
+                FROM "ScheduledItem"
+                WHERE "learnerId" = $1 AND "resourceId" = $2
+            """, learner_profile_id, card_id)
+            if row:
+                d = dict(row)
+                # Add missing fields expected by logic, using defaults
+                d["retrievability"] = 0.9
+                d["intervalDays"] = 1
+                return d
+            return None
 
-    def update_fsrs_params(
-        self,
-        learner_id: str,
-        stability: float,
-        difficulty: float
-    ):
-        """
-        Update learner's FSRS parameters after a review.
-
-        Args:
-            learner_id: User ID
-            stability: New FSRS stability
-            difficulty: New FSRS difficulty
-        """
-        conn = self.get_connection()
-        try:
-            with conn.cursor() as cur:
-                cur.execute("""
-                    UPDATE "LearnerProfile"
-                    SET
-                        "fsrsStability" = %s,
-                        "fsrsDifficulty" = %s,
-                        "updatedAt" = NOW()
-                    WHERE "userId" = %s
-                """, (stability, difficulty, learner_id))
-                conn.commit()
-        finally:
-            self.return_connection(conn)
-
-    def create_evidence(
-        self,
-        learner_id: str,
-        card_id: str,
-        evidence_type: str,
-        observable_data: Dict[str, Any]
-    ):
-        """
-        Create an Evidence record for Evidence-Centered Design.
-
-        Args:
-            learner_id: User ID (actually learner profile ID in DB)
-            card_id: Card ID
-            evidence_type: Type of evidence (PERFORMANCE, ENGAGEMENT, etc.)
-            observable_data: JSON data with observations
-        """
-        conn = self.get_connection()
-        try:
-            with conn.cursor() as cur:
-                cur.execute("""
-                    INSERT INTO "Evidence"
-                    ("learnerId", "cardId", "evidenceType", "observableData", "createdAt")
-                    VALUES (%s, %s, %s, %s, NOW())
-                """, (
-                    learner_id,
-                    card_id,
-                    evidence_type,
-                    json.dumps(observable_data)
-                ))
-                conn.commit()
-        finally:
-            self.return_connection(conn)
-
-    def update_competency_state(
-        self,
-        learner_id: str,
-        concept_id: str,
-        knowledge_probability: float,
-        mastery_level: float
-    ):
-        """
-        Update or create competency state for a concept.
-
-        Args:
-            learner_id: Learner profile ID
-            concept_id: Concept ID
-            knowledge_probability: P(knowledge) from DKT (0-1)
-            mastery_level: Overall mastery (0-1)
-        """
-        conn = self.get_connection()
-        try:
-            with conn.cursor() as cur:
-                # Try to update first
-                cur.execute("""
-                    UPDATE "CompetencyState"
-                    SET
-                        "knowledgeProbability" = %s,
-                        "masteryLevel" = %s,
-                        "lastAssessed" = NOW(),
-                        "evidenceCount" = "evidenceCount" + 1
-                    WHERE "learnerId" = %s AND "conceptId" = %s
-                """, (knowledge_probability, mastery_level, learner_id, concept_id))
-
-                # If no rows updated, insert
-                if cur.rowcount == 0:
-                    cur.execute("""
-                        INSERT INTO "CompetencyState"
-                        ("learnerId", "conceptId", "knowledgeProbability",
-                         "masteryLevel", "lastAssessed", "evidenceCount")
-                        VALUES (%s, %s, %s, %s, NOW(), 1)
-                    """, (learner_id, concept_id, knowledge_probability, mastery_level))
-
-                conn.commit()
-        finally:
-            self.return_connection(conn)
-
-    def get_due_card_ids(
-        self,
-        learner_profile_id: str,
-        limit: int = 20
-    ) -> List[str]:
-        """
-        Get card IDs that are due for review (from ScheduledItem table).
-
-        Args:
-            learner_profile_id: Learner profile ID
-            limit: Maximum number of cards to return
-
-        Returns:
-            List of card IDs
-        """
-        conn = self.get_connection()
-        try:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute("""
-                    SELECT "cardId"
-                    FROM "ScheduledItem"
-                    WHERE "learnerId" = %s
-                      AND "nextDueDate" <= NOW()
-                    ORDER BY "nextDueDate" ASC
-                    LIMIT %s
-                """, (learner_profile_id, limit))
-                results = cur.fetchall()
-                return [row['cardId'] for row in results]
-        finally:
-            self.return_connection(conn)
-
-    def get_scheduled_item(
-        self,
-        learner_profile_id: str,
-        card_id: str
-    ) -> Optional[Dict[str, Any]]:
-        """
-        Get scheduled item state for a specific card.
-
-        Args:
-            learner_profile_id: Learner profile ID
-            card_id: Card ID
-
-        Returns:
-            Scheduled item data or None
-        """
-        conn = self.get_connection()
-        try:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute("""
-                    SELECT
-                        id,
-                        "learnerId",
-                        "cardId",
-                        "currentStability",
-                        "currentDifficulty",
-                        "retrievability",
-                        "intervalDays",
-                        "nextDueDate",
-                        "reviewCount"
-                    FROM "ScheduledItem"
-                    WHERE "learnerId" = %s AND "cardId" = %s
-                """, (learner_profile_id, card_id))
-                item = cur.fetchone()
-                return dict(item) if item else None
-        finally:
-            self.return_connection(conn)
-
-    def update_scheduled_item(
+    async def update_scheduled_item(
         self,
         learner_profile_id: str,
         card_id: str,
@@ -452,48 +272,22 @@ class Database:
         interval_days: int,
         next_due_date: datetime
     ):
-        """
-        Update scheduled item after FSRS review.
+        """Update scheduled item after FSRS review"""
+        async with self.pool.acquire() as conn:
+            # Clean update based on schema
+            await conn.execute("""
+                UPDATE "ScheduledItem"
+                SET
+                    "stability" = $1,
+                    "difficulty" = $2,
+                    "dueDate" = $3,
+                    "updatedAt" = NOW()
+                WHERE "learnerId" = $4 AND "resourceId" = $5
+            """, stability, difficulty, next_due_date, learner_profile_id, card_id)
 
-        Args:
-            learner_profile_id: Learner profile ID
-            card_id: Card ID
-            stability: New stability
-            difficulty: New difficulty
-            retrievability: Current retrievability
-            interval_days: Days until next review
-            next_due_date: Next review date
-        """
-        conn = self.get_connection()
-        try:
-            with conn.cursor() as cur:
-                cur.execute("""
-                    UPDATE "ScheduledItem"
-                    SET
-                        "currentStability" = %s,
-                        "currentDifficulty" = %s,
-                        "retrievability" = %s,
-                        "intervalDays" = %s,
-                        "nextDueDate" = %s,
-                        "reviewCount" = "reviewCount" + 1,
-                        "lastReviewed" = NOW()
-                    WHERE "learnerId" = %s AND "cardId" = %s
-                """, (
-                    stability,
-                    difficulty,
-                    retrievability,
-                    interval_days,
-                    next_due_date,
-                    learner_profile_id,
-                    card_id
-                ))
-                conn.commit()
-        finally:
-            self.return_connection(conn)
-
-    def close(self):
-        """Close all connections in the pool"""
-        self.pool.closeall()
+    async def close(self):
+        """Close connection pool"""
+        await self.disconnect()
 
 
 # Global database instance

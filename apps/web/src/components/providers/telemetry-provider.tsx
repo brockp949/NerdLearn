@@ -1,29 +1,37 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { TelemetryClient, EventType } from '@/lib/telemetry-client';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { TelemetryClient, EngagementScore, Intervention } from '@/lib/telemetry';
 import { v4 as uuidv4 } from 'uuid';
-import throttle from 'lodash.throttle';
 
 interface TelemetryContextType {
     client: TelemetryClient | null;
     sessionId: string;
+    engagement: EngagementScore | null;
+    intervention: Intervention | null;
+    connected: boolean;
 }
 
 const TelemetryContext = createContext<TelemetryContextType>({
     client: null,
     sessionId: '',
+    engagement: null,
+    intervention: null,
+    connected: false,
 });
 
-export const useTelemetry = () => useContext(TelemetryContext);
+export const useTelemetryContext = () => useContext(TelemetryContext);
 
 interface TelemetryProviderProps {
     children: React.ReactNode;
-    userId?: string; // Optional: if not provided, can be anonymous or fetched from auth context
+    userId?: string;
 }
 
 export const TelemetryProvider: React.FC<TelemetryProviderProps> = ({ children, userId }) => {
     const [client, setClient] = useState<TelemetryClient | null>(null);
+    const [engagement, setEngagement] = useState<EngagementScore | null>(null);
+    const [intervention, setIntervention] = useState<Intervention | null>(null);
+    const [connected, setConnected] = useState(false);
+
     const [sessionId] = useState<string>(() => {
-        // Persist session ID in sessionStorage to maintain across reloads, or new per tab
         if (typeof window !== 'undefined') {
             const stored = sessionStorage.getItem('nl_session_id');
             if (stored) return stored;
@@ -34,93 +42,39 @@ export const TelemetryProvider: React.FC<TelemetryProviderProps> = ({ children, 
         return uuidv4();
     });
 
-    const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
-    const IDLE_THRESHOLD_MS = 10000; // 10 seconds for testing, 60s for prod
-
-    // We use a ref for the client to access it in event listeners without dependency cycles
-    const clientRef = useRef<TelemetryClient | null>(null);
-
     useEffect(() => {
-        // Only connect if we are in browser
         if (typeof window === 'undefined') return;
 
-        // Use a default user ID if none provided (e.g. "anonymous") or wait for auth
         const effectiveUserId = userId || 'anonymous';
-        const telemetryUrl = process.env.NEXT_PUBLIC_TELEMETRY_URL || 'ws://localhost:8002';
+        const telemetryUrl = process.env.NEXT_PUBLIC_TELEMETRY_URL || 'ws://localhost:8002/ws';
 
-        const newClient = new TelemetryClient(telemetryUrl, effectiveUserId, sessionId);
+        const newClient = new TelemetryClient({
+            telemetryUrl,
+            learnerId: effectiveUserId,
+            sessionId,
+            throttleMs: 100
+        });
+
+        newClient.onEngagement(setEngagement);
+        newClient.onIntervention(setIntervention);
+        newClient.onConnection(setConnected);
+
         newClient.connect();
-
         setClient(newClient);
-        clientRef.current = newClient;
 
+        // Report metrics on unmount (end of session)
         return () => {
+            newClient.reportSessionMetrics({
+                total_dwell_ms: 0, // In real imp, track this
+                valid_dwell_ms: 0,
+                engagement_score: 0.5
+            });
             newClient.disconnect();
         };
     }, [userId, sessionId]);
 
-    useEffect(() => {
-        if (!client) return;
-
-        const handleMouseMove = throttle((e: MouseEvent) => {
-            resetIdleTimer();
-            clientRef.current?.sendEvent(EventType.MOUSE_MOVE, { x: e.clientX, y: e.clientY });
-        }, 100); // 100ms throttle = 10 events/sec max
-
-        const handleClick = (e: MouseEvent) => {
-            resetIdleTimer();
-            clientRef.current?.sendEvent(EventType.MOUSE_CLICK, { x: e.clientX, y: e.clientY });
-        };
-
-        const handleScroll = throttle((e: Event) => {
-            resetIdleTimer();
-            clientRef.current?.sendEvent(EventType.SCROLL, {
-                scrollY: window.scrollY,
-                percentage: window.scrollY / (document.body.scrollHeight - window.innerHeight)
-            });
-        }, 500);
-
-        const handleKeyDown = (e: KeyboardEvent) => {
-            resetIdleTimer();
-            // Don't send every key, maybe just activity indicator
-            // or specific keys if in focused input (privacy concern)
-            // For now, just reset idle
-        };
-
-        const resetIdleTimer = () => {
-            if (idleTimerRef.current) {
-                clearTimeout(idleTimerRef.current);
-                // If we were idle, send IDLE_END? Tracking idle state complexity...
-                // Simple version: just cancel the start timer
-            }
-            idleTimerRef.current = setTimeout(() => {
-                clientRef.current?.sendEvent(EventType.IDLE_START, {});
-            }, IDLE_THRESHOLD_MS);
-        };
-
-        // Attach listeners
-        window.addEventListener('mousemove', handleMouseMove);
-        window.addEventListener('click', handleClick);
-        window.addEventListener('scroll', handleScroll);
-        window.addEventListener('keydown', handleKeyDown);
-
-        // Initial page view
-        client.sendEvent(EventType.PAGE_VIEW, { path: window.location.pathname });
-
-        // Initial idle timer
-        resetIdleTimer();
-
-        return () => {
-            window.removeEventListener('mousemove', handleMouseMove);
-            window.removeEventListener('click', handleClick);
-            window.removeEventListener('scroll', handleScroll);
-            window.removeEventListener('keydown', handleKeyDown);
-            if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-        };
-    }, [client]);
-
     return (
-        <TelemetryContext.Provider value={{ client, sessionId }}>
+        <TelemetryContext.Provider value={{ client, sessionId, engagement, intervention, connected }}>
             {children}
         </TelemetryContext.Provider>
     );

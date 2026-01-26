@@ -253,6 +253,189 @@ class AsyncGraphService:
                      "weight": self._parse_agtype(r.weight)
                  })
         return learning_path
+        
+    async def update_causal_edges(self, edges: List[Dict[str, Any]], course_id: int = None) -> Dict[str, int]:
+        """
+        Update the graph with causally discovered edges using MERGE for incremental updates.
+
+        Per Causal Discovery PDF Section 8.2: Uses MERGE clause for upsert behavior.
+        Confidence thresholds per Section 6.2:
+        - >0.85 = 'verified' (stable edges)
+        - 0.5-0.85 = 'hypothetical' (candidate edges)
+        - <0.5 = discarded (noise)
+
+        Args:
+            edges: List of dicts with 'source', 'target', 'type', 'weight', 'source_algo', 'confidence'
+            course_id: Optional course ID for scoping edges
+
+        Returns:
+            Dict with 'persisted' count and 'skipped' count
+        """
+        if not edges:
+            return {"persisted": 0, "skipped": 0}
+
+        logger.info(f"Persisting {len(edges)} causal edges to graph database")
+
+        persisted_count = 0
+        skipped_count = 0
+
+        for edge in edges:
+            source = edge.get('source')
+            target = edge.get('target')
+            weight = edge.get('weight', 1.0)
+            confidence = edge.get('confidence', 0.5)
+            method = edge.get('source_algo', 'unknown')
+            edge_type = edge.get('type', 'directed')
+
+            # Determine status based on confidence thresholds (PDF Section 6.2)
+            if confidence > 0.85:
+                status = 'verified'
+            elif confidence >= 0.5:
+                status = 'hypothetical'
+            else:
+                # Skip low-confidence edges
+                skipped_count += 1
+                logger.debug(f"Skipping low-confidence edge {source}->{target} (conf={confidence})")
+                continue
+
+            # MERGE query for idempotent updates (PDF Section 8.2)
+            # Uses CAUSAL_PREREQUISITE to distinguish from expert-defined PREREQUISITE_FOR
+            cols = "result agtype"
+            query = """
+            MATCH (a:Concept {name: $source})
+            MATCH (b:Concept {name: $target})
+            MERGE (a)-[r:CAUSAL_PREREQUISITE]->(b)
+            SET r.weight = $weight,
+                r.confidence = $confidence,
+                r.discovery_method = $method,
+                r.edge_type = $edge_type,
+                r.status = $status,
+                r.last_updated = timestamp()
+            RETURN r IS NOT NULL as success
+            """
+
+            try:
+                records = await self.run_cypher(query, cols, {
+                    "source": str(source),
+                    "target": str(target),
+                    "weight": float(weight),
+                    "confidence": float(confidence),
+                    "method": str(method),
+                    "edge_type": str(edge_type),
+                    "status": status
+                })
+                if records:
+                    persisted_count += 1
+                    logger.debug(f"Persisted causal edge: {source}->{target} ({status})")
+            except Exception as e:
+                logger.error(f"Failed to persist edge {source}->{target}: {e}")
+                skipped_count += 1
+
+        logger.info(f"Causal edge persistence complete: {persisted_count} persisted, {skipped_count} skipped")
+        return {"persisted": persisted_count, "skipped": skipped_count}
+
+    async def get_causal_edges(self, course_id: int = None, status: str = None) -> List[Dict[str, Any]]:
+        """
+        Retrieve causally discovered edges from the graph.
+
+        Args:
+            course_id: Optional course ID to filter by
+            status: Optional status filter ('verified', 'hypothetical')
+
+        Returns:
+            List of causal edge dicts
+        """
+        cols = "source agtype, target agtype, weight agtype, confidence agtype, method agtype, status agtype"
+
+        # Build query based on filters
+        if course_id and status:
+            query = """
+            MATCH (a:Concept {course_id: $course_id})-[r:CAUSAL_PREREQUISITE {status: $status}]->(b:Concept)
+            RETURN a.name, b.name, r.weight, r.confidence, r.discovery_method, r.status
+            """
+            params = {"course_id": course_id, "status": status}
+        elif course_id:
+            query = """
+            MATCH (a:Concept {course_id: $course_id})-[r:CAUSAL_PREREQUISITE]->(b:Concept)
+            RETURN a.name, b.name, r.weight, r.confidence, r.discovery_method, r.status
+            """
+            params = {"course_id": course_id}
+        elif status:
+            query = """
+            MATCH (a:Concept)-[r:CAUSAL_PREREQUISITE {status: $status}]->(b:Concept)
+            RETURN a.name, b.name, r.weight, r.confidence, r.discovery_method, r.status
+            """
+            params = {"status": status}
+        else:
+            query = """
+            MATCH (a:Concept)-[r:CAUSAL_PREREQUISITE]->(b:Concept)
+            RETURN a.name, b.name, r.weight, r.confidence, r.discovery_method, r.status
+            """
+            params = {}
+
+        try:
+            records = await self.run_cypher(query, cols, params)
+            edges = []
+            for r in records:
+                edges.append({
+                    "source": self._parse_agtype(r.source),
+                    "target": self._parse_agtype(r.target),
+                    "weight": self._parse_agtype(r.weight) or 1.0,
+                    "confidence": self._parse_agtype(r.confidence) or 0.5,
+                    "discovery_method": self._parse_agtype(r.method) or "unknown",
+                    "status": self._parse_agtype(r.status) or "hypothetical"
+                })
+            return edges
+        except Exception as e:
+            logger.error(f"Failed to retrieve causal edges: {e}")
+            return []
+
+    async def get_causal_edge_statistics(self, course_id: int = None) -> Dict[str, Any]:
+        """
+        Get statistics about causally discovered edges.
+
+        Returns:
+            Dict with counts by status and discovery method
+        """
+        cols = "status agtype, method agtype, cnt agtype"
+
+        if course_id:
+            query = """
+            MATCH (a:Concept {course_id: $course_id})-[r:CAUSAL_PREREQUISITE]->(b:Concept)
+            RETURN r.status, r.discovery_method, count(r)
+            """
+            params = {"course_id": course_id}
+        else:
+            query = """
+            MATCH (a:Concept)-[r:CAUSAL_PREREQUISITE]->(b:Concept)
+            RETURN r.status, r.discovery_method, count(r)
+            """
+            params = {}
+
+        try:
+            records = await self.run_cypher(query, cols, params)
+
+            status_counts = {"verified": 0, "hypothetical": 0}
+            method_counts = {}
+
+            for r in records:
+                status = self._parse_agtype(r.status) or "unknown"
+                method = self._parse_agtype(r.method) or "unknown"
+                count = self._parse_agtype(r.cnt) or 0
+
+                if status in status_counts:
+                    status_counts[status] += count
+
+                method_counts[method] = method_counts.get(method, 0) + count
+
+            return {
+                "total": sum(status_counts.values()),
+                "by_status": status_counts,
+                "by_method": method_counts
+            }
+        except Exception as e:
+            logger.error(f"Failed to get causal edge statistics: {e}")
+            return {"total": 0, "by_status": {}, "by_method": {}}
 
     # ============== Mutations ==============
 

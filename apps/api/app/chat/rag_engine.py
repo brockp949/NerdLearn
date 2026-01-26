@@ -5,7 +5,7 @@ Context-aware conversational AI using vector search and knowledge graphs
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from pydantic import BaseModel
-import openai
+from openai import AsyncOpenAI
 from app.core.config import settings
 
 
@@ -45,7 +45,7 @@ class RAGChatEngine:
             model: Model to use (gpt-4, gpt-3.5-turbo)
         """
         self.model = model
-        openai.api_key = openai_api_key
+        self.client = AsyncOpenAI(api_key=openai_api_key)
         self.conversation_history: Dict[str, List[ChatMessage]] = {}
 
     async def _generate_hypothetical_document(self, query: str) -> str:
@@ -58,15 +58,15 @@ class RAGChatEngine:
         ]
         
         try:
-            response = openai.chat.completions.create(
-                model="gpt-3.5-turbo", # Use a smaller model for speed
+            response = await self.client.chat.completions.create(
+                model="gpt-3.5-turbo",  # Use a smaller model for speed
                 messages=messages,
                 temperature=0.3,
                 max_tokens=200,
             )
             return response.choices[0].message.content
-        except:
-            return query # Fallback to original query on error
+        except Exception:
+            return query  # Fallback to original query on error
 
     async def retrieve_context(
         self,
@@ -254,7 +254,7 @@ Answer:"""
 
         # Call OpenAI
         try:
-            response = openai.chat.completions.create(
+            response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
                 temperature=0.7,

@@ -24,36 +24,7 @@ import asyncio
 from collections import defaultdict
 import os
 
-# from db import db
-class MockDB:
-    def get_connection(self):
-        class MockConn:
-            def cursor(self, cursor_factory=None):
-                class MockCursor:
-                    def __enter__(self): return self
-                    def __exit__(self, *args): pass
-                    def execute(self, *args): pass
-                    def fetchone(self): return None
-                    def fetchall(self): return []
-                return MockCursor()
-        return MockConn()
-    def return_connection(self, conn): pass
-    def create_learner_profile(self, id): return {"id": "mock_profile_id", "userId": id, "streakDays": 5, "totalXP": 100, "fsrsStability": 0.5, "fsrsDifficulty": 0.5, "level": 1}
-    def load_learner_profile(self, id): return {"id": "mock_profile_id", "userId": id, "streakDays": 5, "totalXP": 100, "fsrsStability": 0.5, "fsrsDifficulty": 0.5, "level": 1}
-    def create_card(self, data): return {"card_id": "mock_card_id"}
-    def load_cards(self, ids): return [{"card_id": "mock_card_id", "conceptId": "mock_concept", "content": "Mock Content", "question": "Mock Q?", "correct_answer": "A", "card_type": "FLASHCARD", "concept_name": "Mock Concept", "domain": "Mock Domain", "bloom_level": "remember", "difficulty": 0.5}]
-    def get_due_card_ids(self, pid, limit=10): return ["mock_card_id"]
-    def get_scheduled_item(self, pid, cid): return {"currentStability": 1.0, "currentDifficulty": 1.0, "retrievability": 1.0}
-    def update_scheduled_item(self, *args): pass
-    def update_learner_xp(self, *args): return {"totalXP": 150, "level": 2}
-    def update_learner_level(self, *args): pass
-    def update_streak(self, *args): pass
-    def update_fsrs_params(self, *args): pass
-    def create_evidence(self, *args): pass
-    def update_competency_state(self, *args): pass
-    def close(self): pass
-
-db = MockDB()
+from db import db
 
 # ============================================================================
 # CONFIGURATION
@@ -285,7 +256,7 @@ async def get_due_cards_from_scheduler(learner_profile_id: str, limit: int = 20)
         print(f"Scheduler service unavailable: {e}, using database fallback")
 
     # Fallback: Get due cards directly from database
-    return db.get_due_card_ids(learner_profile_id, limit)
+    return await db.get_due_card_ids(learner_profile_id, limit)
 
 
 async def assess_zpd_state(
@@ -357,6 +328,112 @@ async def assess_zpd_state(
             "message": "Perfect! You're in the optimal learning zone.",
             "scaffolding": None
         }
+
+
+# ============================================================================
+# CURRICULUM RL INTEGRATION
+# ============================================================================
+
+# CRL API endpoint (typically runs as part of main API)
+CRL_API_URL = os.getenv("CRL_API_URL", "http://localhost:8000/api/v1/adaptive")
+
+# A/B test configuration for CRL
+CRL_AB_TEST_ENABLED = os.getenv("CRL_AB_TEST_ENABLED", "true").lower() == "true"
+CRL_TREATMENT_RATIO = float(os.getenv("CRL_TREATMENT_RATIO", "0.5"))
+
+
+def is_crl_treatment_group(learner_id: str) -> bool:
+    """
+    Determine if learner is in CRL treatment group for A/B test.
+    Uses consistent hashing for deterministic assignment.
+    """
+    if not CRL_AB_TEST_ENABLED:
+        return True  # Everyone gets CRL if A/B test disabled
+
+    # Consistent hash-based assignment
+    import hashlib
+    hash_value = int(hashlib.md5(learner_id.encode()).hexdigest(), 16)
+    return (hash_value % 100) < (CRL_TREATMENT_RATIO * 100)
+
+
+async def get_crl_next_concept(
+    learner_id: str,
+    learner_profile_id: str,
+    course_id: str,
+    session_history: List[Dict]
+) -> Optional[Dict]:
+    """
+    Get next concept recommendation from CRL policy.
+
+    Args:
+        learner_id: User ID
+        learner_profile_id: Database profile ID
+        course_id: Course ID
+        session_history: Current session history
+
+    Returns:
+        CRL recommendation or None if unavailable
+    """
+    # Check A/B test assignment
+    if not is_crl_treatment_group(learner_id):
+        return None
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                f"{CRL_API_URL}/crl/select-concept",
+                json={
+                    "user_id": int(learner_profile_id) if learner_profile_id.isdigit() else hash(learner_profile_id) % 1000000,
+                    "course_id": int(course_id) if course_id.isdigit() else 1,
+                    "session_history": session_history,
+                    "use_ab_test": CRL_AB_TEST_ENABLED,
+                }
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                return {
+                    "concept_id": data["selected_concept_id"],
+                    "concept_name": data.get("concept_name", "Unknown"),
+                    "policy_type": data.get("policy_type", "crl"),
+                    "confidence": data.get("confidence", 0.0),
+                    "source": "crl_policy",
+                }
+
+    except Exception as e:
+        print(f"CRL API unavailable: {e}, falling back to FSRS")
+
+    return None
+
+
+async def update_crl_state(
+    learner_id: str,
+    concept_id: str,
+    correct: bool,
+    response_time_ms: int
+) -> None:
+    """
+    Update CRL state after interaction.
+
+    Args:
+        learner_id: User ID
+        concept_id: Concept practiced
+        correct: Whether response was correct
+        response_time_ms: Response time
+    """
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            await client.post(
+                f"{CRL_API_URL}/crl/update",
+                json={
+                    "user_id": int(learner_id) if learner_id.isdigit() else hash(learner_id) % 1000000,
+                    "concept_id": int(concept_id) if str(concept_id).isdigit() else hash(concept_id) % 1000,
+                    "correct": correct,
+                    "response_time_ms": response_time_ms,
+                }
+            )
+    except Exception as e:
+        print(f"CRL update failed: {e}")
 
 
 async def update_fsrs_schedule(
@@ -448,9 +525,8 @@ async def health():
     """Health check endpoint"""
     # Check database connection
     try:
-        # Use simpler check than db.pool which might trigger psycog2 issues if fragile
-        conn_test = db.get_connection()
-        db.return_connection(conn_test)
+        # Simple query to check connection
+        await db.load_cards([]) 
         db_healthy = True
     except:
         db_healthy = False
@@ -468,8 +544,7 @@ async def seed_test_data(learner_id: str):
     print(f"DEBUG: seed_test_data called with {learner_id}", flush=True)
     try:
         # Create profile
-        # profile = db.create_learner_profile(learner_id)
-        profile = {"id": "mock_profile"}
+        profile = await db.create_learner_profile(learner_id)
         
         # Create a test card
         card_data = {
@@ -480,7 +555,7 @@ async def seed_test_data(learner_id: str):
             "difficulty": 0.3,
             "learner_id": profile["id"]
         }
-        db.create_card(card_data)
+        await db.create_card(card_data)
         
         return {"status": "seeded", "learner_id": learner_id, "profile_id": profile["id"]}
     except Exception as e:
@@ -503,7 +578,7 @@ async def start_session(request: SessionStartRequest):
     """
     try:
         # 1. Load learner profile
-        profile = db.load_learner_profile(request.learner_id)
+        profile = await db.load_learner_profile(request.learner_id)
 
         if not profile:
             raise HTTPException(
@@ -523,7 +598,7 @@ async def start_session(request: SessionStartRequest):
             )
 
         # 3. Load card content from database
-        cards = db.load_cards(due_card_ids[:request.limit])
+        cards = await db.load_cards(due_card_ids[:request.limit])
 
         if not cards:
             raise HTTPException(
@@ -625,7 +700,7 @@ async def process_answer(request: AnswerRequest):
         # Update scheduled item in database
         if "next_due_date" in schedule_info:
             next_due = datetime.fromisoformat(schedule_info["next_due_date"].replace('Z', '+00:00'))
-            db.update_scheduled_item(
+            await db.update_scheduled_item(
                 learner_profile_id,
                 current_card["card_id"],
                 schedule_info.get("new_stability", 2.5),
@@ -649,7 +724,7 @@ async def process_answer(request: AnswerRequest):
 
         # 5. Update database
         # Update XP
-        xp_result = db.update_learner_xp(session["learner_id"], xp_earned)
+        xp_result = await db.update_learner_xp(session["learner_id"], xp_earned)
         new_total_xp = xp_result["totalXP"]
 
         # Calculate level
@@ -657,10 +732,10 @@ async def process_answer(request: AnswerRequest):
 
         # Update level if changed
         if level > xp_result["level"]:
-            db.update_learner_level(session["learner_id"], level)
+            await db.update_learner_level(session["learner_id"], level)
 
         # Store evidence
-        db.create_evidence(
+        await db.create_evidence(
             learner_profile_id,
             current_card["card_id"],
             "PERFORMANCE",
@@ -680,7 +755,7 @@ async def process_answer(request: AnswerRequest):
             Rating.EASY: 0.95
         }[request.rating]
 
-        db.update_competency_state(
+        await db.update_competency_state(
             learner_profile_id,
             current_card["conceptId"],
             knowledge_prob,
@@ -753,7 +828,7 @@ async def get_session(session_id: str):
 @app.get("/profile/{learner_id}")
 async def get_profile(learner_id: str):
     """Get learner profile from database"""
-    profile = db.load_learner_profile(learner_id)
+    profile = await db.load_learner_profile(learner_id)
 
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
@@ -797,16 +872,25 @@ async def end_session(session_id: str):
 @app.on_event("startup")
 async def startup_event():
     print("✅ Orchestrator service started (INTEGRATED VERSION)", flush=True)
-    print("🔗 Database connection: active", flush=True)
-    print(f"🔗 Scheduler URL: {SCHEDULER_URL}", flush=True)
-    print(f"🔗 Inference URL: {INFERENCE_URL}", flush=True)
-    print("🎮 Learning session coordination active", flush=True)
+    print("🔗 Database connection: initializing...", flush=True)
+    try:
+        await db.connect()
+        print("✅ Database connection: active", flush=True)
+    except Exception as e:
+        print(f"❌ Database connection failed: {e}", flush=True)
+        # We don't exit here to allow container to stay up and potentially retry or serve healthy check
+    
+    print("🔗 Redis connection: active", flush=True)
+    print("📡 Service status:", flush=True)
+    print(f"   - Scheduler: {SCHEDULER_URL}", flush=True)
+    print(f"   - Inference: {INFERENCE_URL}", flush=True)
+    print(f"   - Content: {CONTENT_URL}", flush=True)
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    print("🛑 Shutting down Orchestrator...", flush=True)
-    db.close()
+    print("🛑 Orchestrator service shutting down...", flush=True)
+    await db.close()
     print("✅ Database connections closed", flush=True)
 
 

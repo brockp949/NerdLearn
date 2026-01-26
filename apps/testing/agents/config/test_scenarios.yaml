@@ -1,0 +1,81 @@
+# Test Scenarios for Agentic Testing
+#
+# Defines reusable test scenario templates
+
+scenarios:
+  entity_extraction:
+    name: "Entity Extraction with Context"
+    description: "Test entity extraction with contextual disambiguation"
+    goal_vector: "semantic_accuracy"
+    test_cases:
+      - name: "Apple disambiguation"
+        input:
+          text: "Apple announced new MacBook Pro models at their event."
+          context: "technology news"
+        expected:
+          entity_type: "Organization"
+          entity_context: "Consumer Electronics"
+          should_exclude: ["fruit", "food"]
+      
+      - name: "Bank disambiguation"
+        input:
+          text: "The bank on the river flooded."
+          context: "weather report"
+        expected:
+          entity_type: "Location"
+          should_exclude: ["financial institution"]
+  
+  learning_path:
+    name: "Adaptive Learning Path Generation"
+    description: "Test Follow the Cable heuristic in learning paths"
+    goal_vector: "causal_reasoning"
+    test_cases:
+      - name: "Calculus derivatives struggle"
+        input:
+          current_topic: "calculus_derivatives"
+          struggle_areas: ["chain_rule", "implicit_differentiation"]
+          mastery_scores:
+            algebra: 0.85
+            limits: 0.60
+            derivatives: 0.30
+        expected_chain:
+          - "limits_fundamentals"
+          - "basic_derivatives"
+          - "chain_rule"
+          root_cause: "weak limit understanding"
+  
+  content_recommendations:
+    name: "Content Recommendation Quality"
+    description: "Test content recommendations for semantic relevance"
+    goal_vector: "context_awareness"
+    test_cases:
+      - name: "Conflicting sources"
+        input:
+          topic: "climate change"
+          sources: ["scientific_consensus", "climate_denial_blog"]
+        expected_behavior:
+          should_flag_conflict: true
+          should_lower_confidence: true
+          confidence_threshold: 0.4
+  
+  adversarial_robustness:
+    name: "Adversarial Input Handling"
+    description: "Test system response to poisoned data"
+    goal_vector: "robustness"
+    test_cases:
+      - name: "Empty input"
+        poison_type: "edge_case"
+        input:
+          text: ""
+          context: ""
+        expected_behavior: "Handle gracefully with error message"
+      
+      - name: "Relationship conflict"
+        poison_type: "conflict"
+        input:
+          skill_match: 0.95
+          relationship_fit: -0.8
+          conflict_reason: "competitors"
+        expected_behavior:
+          confidence_threshold: 0.3
+          should_warn: true

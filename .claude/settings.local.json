@@ -59,7 +59,12 @@
       "Bash(services/ )",
       "Bash(docs/ )",
       "Bash(setup_unified_db.bat )",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(python3 -m py_compile:*)",
+      "Bash(mv:*)",
+      "Bash(touch:*)",
+      "Bash(rm:*)",
+      "Bash(rmdir:*)"
     ],
     "deny": [],
     "ask": []

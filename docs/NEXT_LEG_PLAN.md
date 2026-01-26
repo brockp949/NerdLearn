@@ -1,5 +1,11 @@
 # Next Leg: Phase 3A - Core Integration & Real Algorithms
 
+## ✅ STATUS: 100% COMPLETE (January 2025)
+
+All deliverables achieved. See `PHASE_3B_COMPLETE.md` for the continuation.
+
+---
+
 ## 🎯 Goal
 Transform NerdLearn from a **beautiful UI demo** into a **fully functional adaptive learning system** with real algorithms (FSRS, DKT, ZPD) working end-to-end.
 
@@ -7,13 +13,13 @@ Transform NerdLearn from a **beautiful UI demo** into a **fully functional adapt
 
 ## 📋 Overview
 
-### Current State
+### Current State ✅ COMPLETED
 - ✅ Beautiful learning interface (QuestionCard, ContentViewer, Scaffolding)
 - ✅ Orchestrator service running (port 8005)
 - ✅ Gamification system (XP, levels, achievements)
-- ⚠️ **Using in-memory demo data** (5 hardcoded cards)
-- ⚠️ **Services exist but not connected** (Scheduler, Inference, Telemetry, Content)
-- ⚠️ **Databases not initialized** (PostgreSQL, Neo4j empty)
+- ✅ **Database integration complete** (asyncpg connection pool)
+- ✅ **All services connected** (Scheduler, Inference, Telemetry, Content)
+- ✅ **Databases initialized and seeded** (PostgreSQL, Neo4j/AGE)
 
 ### Target State
 - ✅ All microservices running and communicating
@@ -65,9 +71,9 @@ npx prisma studio  # Opens GUI to view tables
 ```
 
 **Deliverables:**
-- [ ] Prisma Client generated
-- [ ] All 15+ tables created in PostgreSQL
-- [ ] Can connect to database
+- [x] Prisma Client generated
+- [x] All 15+ tables created in PostgreSQL
+- [x] Can connect to database
 
 **Success Criteria:**
 - `prisma studio` opens successfully
@@ -93,9 +99,9 @@ FOR (c:Concept) REQUIRE c.name IS UNIQUE;
 ```
 
 **Deliverables:**
-- [ ] Neo4j browser accessible
-- [ ] Constraints created
-- [ ] Neo4j client tested (run sample query)
+- [x] Neo4j browser accessible
+- [x] Constraints created
+- [x] Neo4j client tested (run sample query)
 
 **Success Criteria:**
 - Can query Neo4j from TypeScript client
@@ -235,12 +241,12 @@ npx tsx prisma/seed.ts
 ```
 
 **Deliverables:**
-- [ ] seed.ts file created
-- [ ] 3 demo users in PostgreSQL
-- [ ] 10 concepts in PostgreSQL
-- [ ] 30 cards in PostgreSQL
-- [ ] 10 concept nodes in Neo4j
-- [ ] 4+ prerequisite edges in Neo4j
+- [x] seed.ts file created
+- [x] 3 demo users in PostgreSQL
+- [x] 10 concepts in PostgreSQL
+- [x] 30 cards in PostgreSQL
+- [x] 10 concept nodes in Neo4j
+- [x] 4+ prerequisite edges in Neo4j
 
 **Success Criteria:**
 - Can login with demo@nerdlearn.com / demo123
@@ -282,8 +288,8 @@ pip install -r requirements.txt
 ```
 
 **Deliverables:**
-- [ ] All Python dependencies installed
-- [ ] No import errors when running services
+- [x] All Python dependencies installed
+- [x] No import errors when running services
 
 ---
 
@@ -366,10 +372,10 @@ echo "✅ All services stopped!"
 ```
 
 **Deliverables:**
-- [ ] start-all-services.sh created
-- [ ] stop-all-services.sh created
-- [ ] logs/ directory created
-- [ ] All 7 services start successfully
+- [x] start-all-services.sh created
+- [x] stop-all-services.sh created
+- [x] logs/ directory created
+- [x] All 7 services start successfully
 
 **Success Criteria:**
 - All ports responding to health checks
@@ -438,10 +444,10 @@ async def load_cards_from_db(card_ids: List[str]):
 ```
 
 **Tasks:**
-- [ ] Replace DEMO_CARDS with Scheduler API calls
-- [ ] Add load_cards_from_db() function
-- [ ] Handle empty due list (no cards scheduled)
-- [ ] Add error handling for service failures
+- [x] Replace DEMO_CARDS with Scheduler API calls
+- [x] Add load_cards_from_db() function
+- [x] Handle empty due list (no cards scheduled)
+- [x] Add error handling for service failures
 
 ---
 
@@ -481,10 +487,10 @@ async def process_answer(request: AnswerRequest):
 ```
 
 **Tasks:**
-- [ ] Replace success rate calculation with Inference API
-- [ ] Send recent performance history (last 10 cards)
-- [ ] Use real scaffolding from ZPD regulator
-- [ ] Handle inference service downtime gracefully
+- [x] Replace success rate calculation with Inference API
+- [x] Send recent performance history (last 10 cards)
+- [x] Use real scaffolding from ZPD regulator
+- [x] Handle inference service downtime gracefully
 
 ---
 
@@ -524,10 +530,10 @@ async def process_answer(request: AnswerRequest):
 ```
 
 **Tasks:**
-- [ ] Call Scheduler /review endpoint after each answer
-- [ ] Update LearnerProfile with new FSRS parameters
-- [ ] Store review history in CompetencyState table
-- [ ] Handle FSRS calculation errors
+- [x] Call Scheduler /review endpoint after each answer
+- [x] Update LearnerProfile with new FSRS parameters
+- [x] Store review history in CompetencyState table
+- [x] Handle FSRS calculation errors
 
 ---
 
@@ -598,11 +604,11 @@ db = Database()
 ```
 
 **Tasks:**
-- [ ] Create db.py with PostgreSQL operations
-- [ ] Add connection pooling (psycopg2.pool)
-- [ ] Implement all CRUD operations needed
-- [ ] Add error handling and retries
-- [ ] Test database queries
+- [x] Create db.py with PostgreSQL operations
+- [x] Add connection pooling (asyncpg)
+- [x] Implement all CRUD operations needed
+- [x] Add error handling and retries
+- [x] Test database queries
 
 ---
 
@@ -645,10 +651,10 @@ async def get_cards_batch(request: CardBatchRequest):
 ```
 
 **Tasks:**
-- [ ] Add /api/cards/batch endpoint
-- [ ] Add /api/learner/{id} endpoint
-- [ ] Add database connection to API Gateway
-- [ ] Test endpoints with curl
+- [x] Add /api/cards/batch endpoint
+- [x] Add /api/learner/{id} endpoint
+- [x] Add database connection to API Gateway
+- [x] Test endpoints with curl
 
 ---
 
@@ -716,11 +722,11 @@ export class TelemetryClient {
 ```
 
 **Tasks:**
-- [ ] Create telemetry.ts client
-- [ ] Add WebSocket connection on session start
-- [ ] Track mouse movements (throttled to 50ms)
-- [ ] Track dwell time per card
-- [ ] Display engagement score in UI
+- [x] Create telemetry.ts client
+- [x] Add WebSocket connection on session start
+- [x] Track mouse movements (throttled to 50ms)
+- [x] Track dwell time per card
+- [x] Display engagement score in UI
 
 ---
 
@@ -775,11 +781,11 @@ export default function LearnPage() {
 ```
 
 **Tasks:**
-- [ ] Initialize telemetry client on session start
-- [ ] Add mouse move event listener
-- [ ] Track dwell time for each card
-- [ ] Display engagement meter
-- [ ] Clean up WebSocket on unmount
+- [x] Initialize telemetry client on session start
+- [x] Add mouse move event listener
+- [x] Track dwell time for each card
+- [x] Display engagement meter
+- [x] Clean up WebSocket on unmount
 
 ---
 
@@ -874,11 +880,11 @@ async def test_complete_learning_session():
 ```
 
 **Tasks:**
-- [ ] Set up pytest
-- [ ] Write integration tests
-- [ ] Test service-to-service communication
-- [ ] Test database persistence
-- [ ] Run tests and fix failures
+- [x] Set up pytest
+- [x] Write integration tests
+- [x] Test service-to-service communication
+- [x] Test database persistence
+- [x] Run tests and fix failures
 
 ---
 
@@ -886,18 +892,18 @@ async def test_complete_learning_session():
 
 ### Must Have (Minimum Viable)
 - [x] All 7 services start without errors
-- [ ] User can login with seeded credentials
-- [ ] Learning session loads cards from database
-- [ ] FSRS calculates next review dates
-- [ ] ZPD zone changes based on performance
-- [ ] XP persists in PostgreSQL
-- [ ] Telemetry tracks engagement
+- [x] User can login with seeded credentials
+- [x] Learning session loads cards from database
+- [x] FSRS calculates next review dates
+- [x] ZPD zone changes based on performance
+- [x] XP persists in PostgreSQL
+- [x] Telemetry tracks engagement
 
 ### Nice to Have (Stretch Goals)
-- [ ] Knowledge Graph shows prerequisite paths
-- [ ] Scaffolding content loaded from database
-- [ ] Achievements persist across sessions
-- [ ] Error recovery (service restarts)
+- [x] Knowledge Graph shows prerequisite paths
+- [x] Scaffolding content loaded from database
+- [x] Achievements persist across sessions
+- [x] Error recovery (service restarts)
 
 ---
 
@@ -1000,17 +1006,17 @@ By end of Day 3, we should have:
 
 ## 🎯 Definition of Done
 
-This leg is **COMPLETE** when:
+This leg is **COMPLETE** ✅
 
-- [ ] All services start with `./scripts/start-all-services.sh`
-- [ ] Can login with demo@nerdlearn.com
-- [ ] Can complete 10-card learning session
-- [ ] XP updates in database (verified in Prisma Studio)
-- [ ] Next due dates calculated by FSRS (not hardcoded)
-- [ ] ZPD zone indicator changes (see frustration/optimal/comfort)
-- [ ] Telemetry tracks mouse movements (visible in logs)
-- [ ] Integration test passes (`pytest tests/integration/`)
-- [ ] No critical bugs blocking demo
+- [x] All services start with `./scripts/start-all-services.sh`
+- [x] Can login with demo@nerdlearn.com
+- [x] Can complete 10-card learning session
+- [x] XP updates in database (verified in Prisma Studio)
+- [x] Next due dates calculated by FSRS (not hardcoded)
+- [x] ZPD zone indicator changes (see frustration/optimal/comfort)
+- [x] Telemetry tracks mouse movements (visible in logs)
+- [x] Integration test passes (`pytest tests/integration/`)
+- [x] No critical bugs blocking demo
 
 ---
 

@@ -1,0 +1,88 @@
+name: Agentic Testing
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+env:
+  PYTHONPATH: ${{ github.workspace }}
+  LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+
+jobs:
+  architect-review:
+    name: 🏗️ Architect Agent Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+          
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install numpy pytest
+          
+      - name: Get PR Diff
+        id: diff
+        run: |
+          git diff origin/${{ github.base_ref }}...HEAD > pr_diff.txt
+          
+      - name: Run Architect Agent
+        continue-on-error: true
+        id: architect
+        run: |
+          python -m apps.testing.agents.ci_runner \
+            --diff pr_diff.txt \
+            --pr-number ${{ github.event.pull_request.number }}
+            
+  topological-audit:
+    name: 🕸️ Topological Audit
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+      - name: Install Dependencies
+        run: pip install numpy pytest
+        
+      - name: Run Topological Audit
+        run: |
+          # This assumes a script exists to audit the entire current graph
+          # For now, we run the example test which verifies the auditor mechanism
+          python -m apps.testing.agents.tests.example_topological_test
+
+  unit-test-verifier:
+    name: ✅ Verifier Agent Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+      - name: Install Dependencies
+        run: pip install numpy pytest
+          
+      - name: Run Agentic Tests
+        run: |
+          pytest apps/testing/agents/tests/ -v -m "agentic"

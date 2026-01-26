@@ -1,0 +1,50 @@
+# Goal Vectors Configuration
+# 
+# Defines testing objectives for agentic validation
+
+goal_vectors:
+  semantic_accuracy:
+    name: "Semantic Accuracy"
+    description: "Test output must be semantically correct and contextually appropriate"
+    constraints:
+      - "No hallucinations or invented information"
+      - "Context-aware entity resolution"
+      - "Goal-aligned reasoning"
+    pass_threshold: 0.7
+  
+  causal_reasoning:
+    name: "Causal Chain Validation"
+    description: "Follow the Cable - validate prerequisite chains and causal links"
+    constraints:
+      - "Must address root causes before symptoms"
+      - "Each step semantically relevant to goal"
+      - "No generic suggestions unrelated to problem"
+    pass_threshold: 0.75
+  
+  robustness:
+    name: "Adversarial Robustness"
+    description: "System should handle edge cases and poisoned data gracefully"
+    constraints:
+      - "Detect conflicts and contradictions"
+      - "Maintain low confidence on ambiguous inputs"
+      - "Graceful degradation on invalid inputs"
+    pass_threshold: 0.6
+  
+  context_awareness:
+    name: "Context Awareness"
+    description: "Output must demonstrate proper understanding of domain context"
+    constraints:
+      - "Disambiguate based on context clues"
+      - "Avoid context-inappropriate responses"
+      - "Maintain domain-specific knowledge"
+    pass_threshold: 0.70
+  
+  learning_path_integrity:
+    name: "Learning Path Integrity"
+    description: "Adaptive learning paths must follow pedagogical principles"
+    constraints:
+      - "Prerequisites before advanced topics"
+      - "Addresses identified knowledge gaps"
+      - "Progressive difficulty scaling"
+      - "Aligned with learner's mastery state"
+    pass_threshold: 0.75

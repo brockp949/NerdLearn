@@ -1,0 +1,12 @@
+{
+  "state_dim": 60,
+  "action_dim": 20,
+  "hidden_dim": 128,
+  "num_layers": 4,
+  "context_length": 20,
+  "temperature": 0.1,
+  "top_k": 5,
+  "target_return": 10.0,
+  "use_approximate_attention": true,
+  "attention_window": 5
+}

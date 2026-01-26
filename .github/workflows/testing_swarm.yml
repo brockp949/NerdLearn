@@ -1,0 +1,33 @@
+name: Agentic Swarm Tests
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  test-swarm:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest langchain-openai
+        # Future: pip install -r apps/api/requirements.txt if needed
+    - name: Run Core Unit Tests
+      run: |
+        export PYTHONPATH=$PYTHONPATH:.
+        pytest tests/swarm/core
+    - name: Run Agent Smoke Tests
+      run: |
+        export PYTHONPATH=$PYTHONPATH:.
+        python -m tests.swarm.agents.refiner_agent
+        python -m tests.swarm.agents.architect_agent
+        python -m tests.swarm.agents.adversarial_peer

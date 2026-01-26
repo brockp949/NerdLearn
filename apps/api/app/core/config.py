@@ -62,6 +62,10 @@ class Settings(BaseSettings):
     SENTRY_DSN: str = os.getenv("SENTRY_DSN", "")
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
 
+    # Curriculum RL
+    CRL_DT_WEIGHTS_PATH: str = os.getenv("CRL_DT_WEIGHTS_PATH", "../../models/crl_v1/dt_lite_weights.npz")
+    CRL_DT_CONFIG_PATH: str = os.getenv("CRL_DT_CONFIG_PATH", "../../models/crl_v1/dt_lite_config.json")
+
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=True,

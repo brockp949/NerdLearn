@@ -1083,3 +1083,666 @@ async def get_adaptive_hint(
         return await service.get_adaptive_hint(request)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============== Curriculum Reinforcement Learning ==============
+
+from app.adaptive.crl import CurriculumRLPolicy, PolicyConfig, PolicyType
+from app.adaptive.td_bkt import TemporalDifferenceBKT, TDBKTConfig
+from app.adaptive.hlr import HLRModel, RewardCalculator, HLRConfig
+from app.adaptive.kg_mask import ActionMasker, ActionMaskerConfig
+
+# Initialize CRL components (lazy loaded on first use)
+_crl_policy: Optional[CurriculumRLPolicy] = None
+_td_bkt: Optional[TemporalDifferenceBKT] = None
+_hlr_model: Optional[HLRModel] = None
+_action_masker: Optional[ActionMasker] = None
+
+
+from app.core.config import settings
+
+def get_crl_policy() -> CurriculumRLPolicy:
+    """Get or create CRL policy instance"""
+    global _crl_policy
+    if _crl_policy is None:
+        config = PolicyConfig(
+            policy_type=PolicyType.DT_LITE,  # Use lightweight inference by default
+            fallback_to_zpd=True,
+            dt_weights_path=settings.CRL_DT_WEIGHTS_PATH,
+            dt_config_path=settings.CRL_DT_CONFIG_PATH,
+        )
+        _crl_policy = CurriculumRLPolicy(config)
+    return _crl_policy
+
+
+def get_td_bkt() -> TemporalDifferenceBKT:
+    """Get or create TD-BKT instance"""
+    global _td_bkt
+    if _td_bkt is None:
+        config = TDBKTConfig()
+        _td_bkt = TemporalDifferenceBKT(config)
+    return _td_bkt
+
+
+def get_hlr_model() -> HLRModel:
+    """Get or create HLR model instance"""
+    global _hlr_model
+    if _hlr_model is None:
+        config = HLRConfig()
+        _hlr_model = HLRModel(config)
+    return _hlr_model
+
+
+def get_action_masker() -> ActionMasker:
+    """Get or create action masker instance"""
+    global _action_masker
+    if _action_masker is None:
+        config = ActionMaskerConfig()
+        _action_masker = ActionMasker(config)
+    return _action_masker
+
+
+class CRLConceptSelectionRequest(BaseModel):
+    """Request for CRL concept selection"""
+    user_id: int = Field(..., description="User ID")
+    course_id: int = Field(..., description="Course ID")
+    session_history: Optional[List[Dict]] = Field(default=None, description="Current session history")
+    use_ab_test: bool = Field(default=True, description="Use A/B testing if configured")
+
+
+class CRLUpdateRequest(BaseModel):
+    """Request for updating CRL state after interaction"""
+    user_id: int = Field(..., description="User ID")
+    concept_id: int = Field(..., description="Concept practiced")
+    correct: bool = Field(..., description="Whether response was correct")
+    response_time_ms: int = Field(..., description="Response time in milliseconds")
+    timestamp: Optional[datetime] = Field(default=None, description="Interaction timestamp")
+
+
+class CRLBeliefStateRequest(BaseModel):
+    """Request for getting belief state"""
+    user_id: int = Field(..., description="User ID")
+    concept_ids: List[int] = Field(..., description="Concept IDs to include")
+
+
+class CRLBenchmarkRequest(BaseModel):
+    """Request for running CRL benchmark"""
+    num_students: int = Field(default=100, ge=10, le=1000, description="Number of simulated students")
+    num_sessions: int = Field(default=30, ge=5, le=100, description="Sessions per student")
+    items_per_session: int = Field(default=10, ge=5, le=50, description="Items per session")
+
+
+@router.post("/crl/select-concept")
+async def crl_select_next_concept(
+    request: CRLConceptSelectionRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Select next concept using Curriculum RL policy
+
+    Uses offline RL (Decision Transformer or CQL) trained on
+    historical student data to optimize for long-term retention.
+
+    Research basis:
+    - Curriculum Reinforcement Learning for ITS
+    - Offline RL: Conservative Q-Learning, Decision Transformer
+    - TD-BKT for state estimation with forgetting
+    """
+    try:
+        # Get user's concept masteries for this course
+        concepts_result = await db.execute(
+            select(Concept).where(Concept.course_id == request.course_id)
+        )
+        concepts = concepts_result.scalars().all()
+        concept_ids = [str(c.id) for c in concepts]
+
+        if not concept_ids:
+            raise HTTPException(status_code=404, detail="No concepts found for course")
+
+        # Get user masteries
+        mastery_result = await db.execute(
+            select(UserConceptMastery).where(
+                and_(
+                    UserConceptMastery.user_id == request.user_id,
+                    UserConceptMastery.concept_id.in_([c.id for c in concepts])
+                )
+            )
+        )
+        masteries = mastery_result.scalars().all()
+        mastery_map = {str(m.concept_id): m.mastery_level for m in masteries}
+
+        # Initialize TD-BKT for state estimation
+        td_bkt = get_td_bkt()
+        td_bkt.initialize(concept_ids)
+
+        # Update TD-BKT with current masteries
+        for cid, mastery in mastery_map.items():
+            if cid in td_bkt.belief_state.concepts:
+                td_bkt.belief_state.concepts[cid].mastery = mastery
+
+        # Get belief state vector
+        belief_state = td_bkt.get_belief_state()
+        belief_vector = belief_state.to_vector()
+
+        # Get action mask from knowledge graph (simplified - in production, query KG)
+        action_masker = get_action_masker()
+        action_masker.initialize(concept_ids)
+        action_mask = action_masker.get_action_mask(belief_state.concepts)
+
+        # Get CRL policy
+        policy = get_crl_policy()
+
+        # Select concept
+        selected_concept, selection_info = policy.select_next_concept(
+            belief_state=belief_vector,
+            valid_actions=action_mask,
+            concept_ids=concept_ids,
+        )
+
+        # Map back to integer ID
+        selected_concept_id = int(selected_concept)
+
+        # Get concept details
+        concept_result = await db.execute(
+            select(Concept).where(Concept.id == selected_concept_id)
+        )
+        concept = concept_result.scalar_one_or_none()
+
+        return {
+            "selected_concept_id": selected_concept_id,
+            "concept_name": concept.name if concept else "Unknown",
+            "policy_type": selection_info.get("policy_type", "unknown"),
+            "confidence": selection_info.get("confidence", 0.0),
+            "action_values": selection_info.get("action_values", {}),
+            "alternative_concepts": selection_info.get("alternatives", [])[:3],
+            "belief_state_summary": {
+                "mean_mastery": float(belief_vector[:len(concept_ids)].mean()) if len(belief_vector) > 0 else 0,
+                "concepts_mastered": sum(1 for m in mastery_map.values() if m >= 0.95),
+                "concepts_total": len(concept_ids),
+            }
+        }
+
+    except Exception as e:
+        # Fallback to ZPD-based selection on error
+        import logging
+        logging.error(f"CRL selection error: {e}")
+        return await get_content_recommendations(
+            user_id=request.user_id,
+            course_id=request.course_id,
+            top_n=1,
+            db=db
+        )
+
+
+@router.post("/crl/update")
+async def crl_update_state(
+    request: CRLUpdateRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Update CRL state after a learning interaction
+
+    Updates:
+    - TD-BKT belief state (with forgetting)
+    - HLR half-life estimates
+    - Records for offline RL training
+    """
+    try:
+        td_bkt = get_td_bkt()
+        hlr = get_hlr_model()
+
+        concept_id = str(request.concept_id)
+        timestamp = request.timestamp or datetime.now()
+
+        # Update TD-BKT
+        if concept_id in td_bkt.belief_state.concepts:
+            td_bkt.update(
+                concept_id=concept_id,
+                correct=request.correct,
+                timestamp=timestamp,
+            )
+
+        # Update HLR
+        hlr.update(
+            concept_id=concept_id,
+            correct=request.correct,
+            timestamp=timestamp,
+        )
+
+        # Get updated state
+        belief_state = td_bkt.get_belief_state()
+        concept_state = belief_state.concepts.get(concept_id)
+
+        # Calculate reward (for logging/analysis)
+        reward_calc = RewardCalculator(hlr)
+        reward = reward_calc.compute_reward(
+            concept_id=concept_id,
+            correct=request.correct,
+            reward_type="delta_retention",
+        )
+
+        # Update database mastery record
+        result = await db.execute(
+            select(UserConceptMastery).where(
+                and_(
+                    UserConceptMastery.user_id == request.user_id,
+                    UserConceptMastery.concept_id == request.concept_id
+                )
+            )
+        )
+        mastery_record = result.scalar_one_or_none()
+
+        if mastery_record:
+            mastery_record.mastery_level = concept_state.mastery if concept_state else mastery_record.mastery_level
+            mastery_record.practice_count += 1
+            mastery_record.last_practiced = timestamp
+            await db.commit()
+
+        return {
+            "concept_id": request.concept_id,
+            "updated_mastery": concept_state.mastery if concept_state else 0.0,
+            "half_life_hours": concept_state.half_life_hours if concept_state else 24.0,
+            "reward": reward,
+            "recall_probability": concept_state.compute_recall_probability() if concept_state else 0.0,
+        }
+
+    except Exception as e:
+        import logging
+        logging.error(f"CRL update error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/crl/belief-state/{user_id}")
+async def get_crl_belief_state(
+    user_id: int,
+    course_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get current TD-BKT belief state for user
+
+    Returns mastery, recency, and half-life estimates
+    for all concepts in the course.
+    """
+    try:
+        # Get concepts
+        concepts_result = await db.execute(
+            select(Concept).where(Concept.course_id == course_id)
+        )
+        concepts = concepts_result.scalars().all()
+        concept_ids = [str(c.id) for c in concepts]
+
+        # Get TD-BKT state
+        td_bkt = get_td_bkt()
+        if not td_bkt.belief_state.concepts:
+            td_bkt.initialize(concept_ids)
+
+        belief_state = td_bkt.get_belief_state()
+
+        # Format response
+        concept_states = []
+        for concept in concepts:
+            cid = str(concept.id)
+            state = belief_state.concepts.get(cid)
+
+            if state:
+                concept_states.append({
+                    "concept_id": concept.id,
+                    "concept_name": concept.name,
+                    "mastery": state.mastery,
+                    "half_life_hours": state.half_life_hours,
+                    "recall_probability": state.compute_recall_probability(),
+                    "practice_count": state.practice_count,
+                    "last_practiced": state.last_practiced.isoformat() if state.last_practiced else None,
+                })
+            else:
+                concept_states.append({
+                    "concept_id": concept.id,
+                    "concept_name": concept.name,
+                    "mastery": 0.0,
+                    "half_life_hours": 24.0,
+                    "recall_probability": 0.0,
+                    "practice_count": 0,
+                    "last_practiced": None,
+                })
+
+        # Compute summary statistics
+        masteries = [s["mastery"] for s in concept_states]
+        recalls = [s["recall_probability"] for s in concept_states]
+
+        return {
+            "user_id": user_id,
+            "course_id": course_id,
+            "concepts": concept_states,
+            "summary": {
+                "mean_mastery": sum(masteries) / len(masteries) if masteries else 0,
+                "mean_recall_probability": sum(recalls) / len(recalls) if recalls else 0,
+                "concepts_mastered": sum(1 for m in masteries if m >= 0.95),
+                "total_concepts": len(concept_states),
+            }
+        }
+
+    except Exception as e:
+        import logging
+        logging.error(f"CRL belief state error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/crl/benchmark")
+async def run_crl_benchmark(request: CRLBenchmarkRequest):
+    """
+    Run CRL policy benchmark against baselines
+
+    Evaluates:
+    - Day-30 retention (primary metric)
+    - Learning efficiency
+    - Interleaving score
+
+    Baselines:
+    - Random selection
+    - Round-robin
+    - Mastery threshold (0.75)
+    - Spaced-only
+    """
+    try:
+        from app.adaptive.simulator import (
+            Benchmark,
+            BenchmarkConfig,
+            StudentSimulatorConfig,
+        )
+
+        # Configure benchmark
+        config = BenchmarkConfig(
+            num_simulated_students=request.num_students,
+            num_sessions_per_student=request.num_sessions,
+            items_per_session=request.items_per_session,
+            num_workers=4,
+        )
+
+        simulator_config = StudentSimulatorConfig(
+            num_concepts=20,
+            seed=42,
+        )
+
+        benchmark = Benchmark(config, simulator_config)
+
+        # Get CRL policy function
+        policy = get_crl_policy()
+
+        def crl_policy_fn(simulator, belief_state=None):
+            # Get belief vector from simulator
+            mastery_vector = simulator.get_true_mastery_vector()
+
+            # Create simple belief state
+            import numpy as np
+            belief = np.concatenate([
+                mastery_vector,
+                np.ones_like(mastery_vector),  # recency
+                np.ones_like(mastery_vector) * 24,  # half-lives
+            ])
+
+            # Get action mask (all valid for simulation)
+            action_mask = np.ones(len(simulator.concept_ids))
+
+            # Select concept
+            concept, _ = policy.select_next_concept(
+                belief_state=belief,
+                valid_actions=action_mask,
+                concept_ids=simulator.concept_ids,
+            )
+
+            return concept
+
+        # Run benchmark
+        results = benchmark.compare_policies(
+            policies=[("crl_policy", crl_policy_fn)],
+            include_baselines=True,
+        )
+
+        return {
+            "summary": results.summary(),
+            "ranking_by_retention": results.ranking_by_retention,
+            "ranking_by_efficiency": results.ranking_by_efficiency,
+            "policy_results": {
+                name: {
+                    "day30_retention_mean": r.day30_retention_mean,
+                    "day30_retention_std": r.day30_retention_std,
+                    "learning_efficiency_mean": r.learning_efficiency_mean,
+                    "interleaving_score_mean": r.interleaving_score_mean,
+                }
+                for name, r in results.policy_results.items()
+            },
+            "improvement_over_baseline": results.get_improvement_over_baseline(
+                "crl_policy", "mastery_threshold"
+            ) if "crl_policy" in results.policy_results else {},
+        }
+
+    except Exception as e:
+        import logging
+        logging.error(f"CRL benchmark error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/crl/policy-info")
+async def get_crl_policy_info():
+    """
+    Get information about the current CRL policy configuration
+    """
+    policy = get_crl_policy()
+
+    return {
+        "policy_type": policy.config.policy_type.value,
+        "num_concepts": policy.config.num_concepts,
+        "state_dim": policy.config.state_dim,
+        "context_length": policy.config.context_length,
+        "fallback_to_zpd": policy.config.fallback_to_zpd,
+        "model_loaded": policy._policy is not None,
+        "description": "Curriculum RL policy using offline RL for optimal concept sequencing",
+        "research_basis": [
+            "Conservative Q-Learning (Kumar et al., 2020)",
+            "Decision Transformer (Chen et al., 2021)",
+            "TD-BKT for state estimation with forgetting",
+            "Half-Life Regression for reward shaping",
+        ],
+    }
+
+
+# ============== Causal Discovery Endpoints ==============
+# Based on "Causal Discovery for Educational Graphs" PDF specification
+
+from app.adaptive.causal_discovery.manager import causal_manager
+from app.services.graph_service import AsyncGraphService
+
+import time
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+class CausalDiscoveryRequest(BaseModel):
+    """Request model for triggering causal discovery pipeline"""
+    course_id: int = Field(..., description="Course ID to analyze")
+    min_users: int = Field(default=50, ge=10, description="Minimum users required for reliable discovery")
+    notears_lambda: float = Field(default=0.1, ge=0.01, le=1.0, description="NOTEARS L1 sparsity penalty")
+    fci_alpha: float = Field(default=0.05, ge=0.01, le=0.1, description="FCI significance level")
+    edge_threshold: float = Field(default=0.3, ge=0.1, le=0.9, description="Minimum edge weight threshold")
+
+
+class CausalDiscoveryResponse(BaseModel):
+    """Response model for causal discovery results"""
+    status: str
+    course_id: int
+    edges_discovered: int
+    edges_persisted: int
+    edges_skipped: int
+    communities_detected: int
+    execution_time_seconds: float
+    message: str
+
+
+class CausalEdgeStatusResponse(BaseModel):
+    """Response model for causal edge status"""
+    course_id: Optional[int]
+    total_edges: int
+    by_status: Dict[str, int]
+    by_method: Dict[str, int]
+
+
+@router.post("/causal-discovery/run", response_model=CausalDiscoveryResponse)
+async def run_causal_discovery(
+    request: CausalDiscoveryRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Trigger the causal discovery pipeline for a course.
+
+    Pipeline (per PDF Sections 3-7):
+    1. Data preprocessing: Convert mastery logs to User x Concept matrix
+    2. Global discovery: NOTEARS for DAG skeleton with L1 sparsity
+    3. Community detection: Leiden algorithm for clustering
+    4. Local refinement: FCI on dense subcommunities to detect confounders
+    5. Persistence: MERGE edges to Apache AGE with confidence scoring
+
+    Research basis:
+    - NOTEARS: Continuous optimization for acyclic structure learning (Zheng et al., 2018)
+    - FCI: Fast Causal Inference for latent confounders (Spirtes et al., 2000)
+    - Leiden: Guaranteed well-connected communities (Traag et al., 2019)
+
+    Bootstrap stability scoring (PDF Section 6):
+    - >0.85 confidence = 'verified' status
+    - 0.5-0.85 confidence = 'hypothetical' status
+    - <0.5 confidence = discarded as noise
+    """
+    start_time = time.time()
+
+    try:
+        # 1. Fetch concepts for course
+        concepts_result = await db.execute(
+            select(Concept).where(Concept.course_id == request.course_id)
+        )
+        concepts = concepts_result.scalars().all()
+        concept_ids = [c.id for c in concepts]
+
+        if not concept_ids:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No concepts found for course {request.course_id}"
+            )
+
+        # 2. Fetch mastery data
+        mastery_result = await db.execute(
+            select(UserConceptMastery).where(
+                UserConceptMastery.concept_id.in_(concept_ids)
+            )
+        )
+        masteries = mastery_result.scalars().all()
+
+        # Convert to format expected by manager
+        mastery_data = [
+            {
+                "user_id": m.user_id,
+                "concept_id": m.concept_id,
+                "mastery": m.mastery_level
+            }
+            for m in masteries
+        ]
+
+        # Check minimum user threshold
+        unique_users = len(set(m["user_id"] for m in mastery_data))
+        if unique_users < request.min_users:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Insufficient users for reliable discovery: {unique_users} < {request.min_users} minimum"
+            )
+
+        # 3. Run discovery pipeline
+        graph_service = AsyncGraphService(db)
+        await causal_manager.run_discovery_pipeline(mastery_data, graph_service)
+
+        # 4. Get results
+        edges_discovered = len(causal_manager._last_edges) if hasattr(causal_manager, '_last_edges') else 0
+        persist_result = causal_manager._last_persist_result if hasattr(causal_manager, '_last_persist_result') else {"persisted": 0, "skipped": 0}
+        communities = len(causal_manager._last_communities) if hasattr(causal_manager, '_last_communities') else 0
+
+        execution_time = time.time() - start_time
+
+        return CausalDiscoveryResponse(
+            status="completed",
+            course_id=request.course_id,
+            edges_discovered=edges_discovered,
+            edges_persisted=persist_result.get("persisted", 0),
+            edges_skipped=persist_result.get("skipped", 0),
+            communities_detected=communities,
+            execution_time_seconds=round(execution_time, 2),
+            message=f"Discovered {edges_discovered} edges from {unique_users} users across {len(concept_ids)} concepts"
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Causal discovery failed for course {request.course_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/causal-discovery/status/{course_id}", response_model=CausalEdgeStatusResponse)
+async def get_causal_discovery_status(
+    course_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get status of causally discovered edges for a course.
+
+    Returns counts of verified vs hypothetical edges and breakdown by discovery method.
+    """
+    try:
+        graph_service = AsyncGraphService(db)
+        stats = await graph_service.get_causal_edge_statistics(course_id)
+
+        return CausalEdgeStatusResponse(
+            course_id=course_id,
+            total_edges=stats.get("total", 0),
+            by_status=stats.get("by_status", {}),
+            by_method=stats.get("by_method", {})
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to get causal discovery status for course {course_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/causal-discovery/edges/{course_id}")
+async def get_causal_edges(
+    course_id: int,
+    status: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Retrieve causally discovered edges for a course.
+
+    Args:
+        course_id: Course ID to filter by
+        status: Optional filter by status ('verified' or 'hypothetical')
+
+    Returns:
+        List of causal edges with source, target, weight, confidence, method, and status
+    """
+    if status and status not in ["verified", "hypothetical"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Status must be 'verified' or 'hypothetical'"
+        )
+
+    try:
+        graph_service = AsyncGraphService(db)
+        edges = await graph_service.get_causal_edges(course_id, status)
+
+        return {
+            "course_id": course_id,
+            "filter_status": status,
+            "count": len(edges),
+            "edges": edges
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to get causal edges for course {course_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

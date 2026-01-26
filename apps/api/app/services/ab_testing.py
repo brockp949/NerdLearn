@@ -661,5 +661,226 @@ def register_default_flags():
         feature_flag_manager.register_flag(flag)
 
 
+# ==================== CRL A/B Testing Configuration ====================
+
+def register_crl_experiment():
+    """
+    Register Curriculum RL A/B testing experiment.
+
+    This experiment compares the CRL policy (Decision Transformer / CQL)
+    against the baseline (ZPD + FSRS) for content sequencing.
+
+    Primary Metrics:
+    - day30_retention: 30-day retention rate (target: +15% improvement)
+    - learning_efficiency: Mastery gain per practice item
+    - interleaving_score: Diversity of concept coverage
+
+    Secondary Metrics:
+    - session_completion_rate
+    - time_to_mastery
+    - user_satisfaction
+    """
+    # CRL Feature Flag
+    crl_flag = FeatureFlag(
+        id="crl_policy",
+        name="Curriculum RL Policy",
+        description="Use offline RL policy for concept selection (vs ZPD baseline)",
+        enabled=True,
+        rollout_percentage=50,  # 50% of users get CRL
+        variants={
+            "control": "zpd_baseline",
+            "treatment": "crl_dt_lite",
+        }
+    )
+    feature_flag_manager.register_flag(crl_flag)
+
+    # CRL A/B Experiment
+    crl_experiment = Experiment(
+        id="crl_vs_baseline",
+        name="Curriculum RL vs ZPD Baseline",
+        description=(
+            "Compare offline RL-based curriculum sequencing against "
+            "traditional ZPD + FSRS scheduling for long-term retention optimization."
+        ),
+        status=ExperimentStatus.RUNNING,
+        variants=[
+            Variant(
+                id="control",
+                name="ZPD + FSRS Baseline",
+                variant_type=VariantType.CONTROL,
+                weight=50,
+                config={
+                    "policy_type": "zpd_baseline",
+                    "use_fsrs": True,
+                    "use_zpd": True,
+                    "use_interleaved": True,
+                }
+            ),
+            Variant(
+                id="treatment",
+                name="CRL Decision Transformer",
+                variant_type=VariantType.TREATMENT,
+                weight=50,
+                config={
+                    "policy_type": "dt_lite",
+                    "fallback_to_zpd": True,
+                    "use_td_bkt": True,
+                    "use_hlr_rewards": True,
+                    "use_kg_masking": True,
+                }
+            ),
+        ],
+        metrics=[
+            "day30_retention",
+            "learning_efficiency",
+            "interleaving_score",
+            "session_completion_rate",
+            "time_to_mastery",
+            "accuracy",
+        ],
+        min_sample_size=500,
+        targeting_rules=[
+            # Only include users with at least 10 learning sessions
+            TargetingRule(
+                attribute="session_count",
+                operator=TargetingOperator.GREATER_THAN,
+                value=10
+            )
+        ]
+    )
+    experiment_manager.create_experiment(crl_experiment)
+
+    # Policy comparison sub-experiment (DT vs CQL)
+    policy_comparison_experiment = Experiment(
+        id="dt_vs_cql",
+        name="Decision Transformer vs CQL",
+        description="Compare DT-Lite against CQL for offline RL curriculum policy",
+        status=ExperimentStatus.DRAFT,  # Not started yet
+        variants=[
+            Variant(
+                id="dt_lite",
+                name="DT-Lite (Transformer)",
+                variant_type=VariantType.CONTROL,
+                weight=50,
+                config={
+                    "policy_type": "dt_lite",
+                    "context_length": 20,
+                    "temperature": 1.0,
+                }
+            ),
+            Variant(
+                id="cql",
+                name="CQL (Value-Based)",
+                variant_type=VariantType.TREATMENT,
+                weight=50,
+                config={
+                    "policy_type": "cql",
+                    "conservatism_alpha": 2.0,
+                    "temperature": 0.1,
+                }
+            ),
+        ],
+        metrics=["day30_retention", "learning_efficiency"],
+        min_sample_size=200,
+    )
+    experiment_manager.create_experiment(policy_comparison_experiment)
+
+    logger.info("Registered CRL A/B testing experiments")
+
+
+def get_crl_variant_for_user(user_id: str) -> Dict[str, Any]:
+    """
+    Get CRL policy variant for a user.
+
+    Args:
+        user_id: User ID
+
+    Returns:
+        Dict with policy configuration
+    """
+    # Check feature flag first
+    if not feature_flag_manager.is_enabled("crl_policy", user_id):
+        return {
+            "variant": "control",
+            "policy_type": "zpd_baseline",
+            "config": {
+                "use_fsrs": True,
+                "use_zpd": True,
+                "use_interleaved": True,
+            }
+        }
+
+    # Get experiment variant
+    variant = experiment_manager.get_variant("crl_vs_baseline", user_id)
+
+    if variant:
+        return {
+            "variant": variant.id,
+            "policy_type": variant.config.get("policy_type", "zpd_baseline"),
+            "config": variant.config
+        }
+
+    # Default to control
+    return {
+        "variant": "control",
+        "policy_type": "zpd_baseline",
+        "config": {
+            "use_fsrs": True,
+            "use_zpd": True,
+        }
+    }
+
+
+def record_crl_metrics(
+    user_id: str,
+    day30_retention: Optional[float] = None,
+    learning_efficiency: Optional[float] = None,
+    interleaving_score: Optional[float] = None,
+    session_completion_rate: Optional[float] = None,
+    accuracy: Optional[float] = None,
+):
+    """
+    Record metrics for CRL A/B experiment.
+
+    Args:
+        user_id: User ID
+        day30_retention: 30-day retention score
+        learning_efficiency: Learning efficiency metric
+        interleaving_score: Interleaving score
+        session_completion_rate: Session completion rate
+        accuracy: Practice accuracy
+    """
+    if day30_retention is not None:
+        experiment_manager.record_metric("crl_vs_baseline", user_id, "day30_retention", day30_retention)
+
+    if learning_efficiency is not None:
+        experiment_manager.record_metric("crl_vs_baseline", user_id, "learning_efficiency", learning_efficiency)
+
+    if interleaving_score is not None:
+        experiment_manager.record_metric("crl_vs_baseline", user_id, "interleaving_score", interleaving_score)
+
+    if session_completion_rate is not None:
+        experiment_manager.record_metric("crl_vs_baseline", user_id, "session_completion_rate", session_completion_rate)
+
+    if accuracy is not None:
+        experiment_manager.record_metric("crl_vs_baseline", user_id, "accuracy", accuracy)
+
+
+def get_crl_experiment_results() -> Dict[str, Any]:
+    """
+    Get current CRL experiment results.
+
+    Returns:
+        Experiment results with statistical analysis
+    """
+    return experiment_manager.get_results("crl_vs_baseline")
+
+
 # Initialize default flags
 register_default_flags()
+
+# Register CRL experiment (only if not already registered)
+try:
+    register_crl_experiment()
+except Exception as e:
+    logger.warning(f"Could not register CRL experiment: {e}")

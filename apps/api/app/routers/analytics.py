@@ -268,6 +268,12 @@ async def ingest_session_metrics(
     # Calculate minutes
     valid_minutes = metrics.valid_dwell_ms / 60000
     
+    # Log for verification
+    print(f"✅ RECORDED SESSION METRICS for User {metrics.user_id}:", flush=True)
+    print(f"   - Session ID: {metrics.session_id}", flush=True)
+    print(f"   - Valid Minutes: {valid_minutes:.2f}", flush=True)
+    print(f"   - Engagement Score: {metrics.engagement_score}", flush=True)
+
     return {
         "status": "recorded",
         "added_minutes": round(valid_minutes, 2),

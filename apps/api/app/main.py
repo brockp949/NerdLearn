@@ -8,9 +8,50 @@ import logging
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.routers import courses, modules, assessment, reviews, chat, processing, adaptive, gamification, graph, curriculum, session, social, admin
+from app.routers import (
+    courses,
+    modules,
+    assessment,
+    reviews,
+    chat,
+    processing,
+    adaptive,
+    gamification,
+    graph,
+    curriculum,
+    session,
+    social,
+    admin,
+    alga_next,
+    counterfactual,
+)
 
-# ... (imports)
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan manager"""
+    logger.info("Starting NerdLearn API...")
+    yield
+    logger.info("Shutting down NerdLearn API...")
+
+
+app = FastAPI(
+    title="NerdLearn API",
+    description="Adaptive Learning Platform API",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
+# CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS if hasattr(settings, 'CORS_ORIGINS') else ["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Include routers
 app.include_router(courses.router, prefix="/api/courses", tags=["courses"])
@@ -24,9 +65,12 @@ app.include_router(gamification.router, prefix="/api/gamification", tags=["gamif
 app.include_router(graph.router, prefix="/api/graph", tags=["graph"])
 app.include_router(social.router, prefix="/api/social", tags=["social"])
 app.include_router(curriculum.router, prefix="/api/curriculum", tags=["curriculum"])
-# app.include_router(transformation.router, prefix="/api/transformation", tags=["transformation"])
 app.include_router(session.router, prefix="/api/session", tags=["session"])
 app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
+# ALGA-Next: Adaptive Learning via Generative Allocation
+app.include_router(alga_next.router, prefix="/api", tags=["ALGA-Next Adaptive Learning"])
+# Counterfactual Explanations: Causal analysis, recourse, and Socratic dialogue
+app.include_router(counterfactual.router, prefix="/api/counterfactual", tags=["counterfactual"])
 
 
 @app.get("/")
@@ -63,7 +107,7 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         health_status["services"]["database"] = "unhealthy"
 
     # Check Redis connectivity (for rate limiting)
-    if settings.RATE_LIMIT_ENABLED:
+    if hasattr(settings, 'RATE_LIMIT_ENABLED') and settings.RATE_LIMIT_ENABLED:
         try:
             import redis.asyncio as redis
             redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True)
