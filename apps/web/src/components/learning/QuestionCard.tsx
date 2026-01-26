@@ -10,6 +10,7 @@ export interface LearningCard {
   correct_answer?: string
   difficulty: number
   due_date?: string
+  rationale?: string; // e.g. "Spaced Repetition Review", "Interleaved Practice"
 }
 
 export type Rating = 'again' | 'hard' | 'good' | 'easy'
@@ -41,7 +42,14 @@ export function QuestionCard({ card, onAnswer, loading }: QuestionCardProps) {
   ]
 
   return (
-    <div className="bg-white rounded-lg shadow-lg p-8 max-w-3xl mx-auto">
+    <div className="bg-white rounded-lg shadow-lg p-8 max-w-3xl mx-auto relative overflow-hidden">
+      {/* Rationale Badge */}
+      {card.rationale && (
+        <div className="absolute top-0 right-0 bg-blue-100 text-blue-800 text-xs font-semibold px-3 py-1 rounded-bl-lg">
+          {card.rationale}
+        </div>
+      )}
+
       {/* Card Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center space-x-3">

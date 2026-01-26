@@ -260,13 +260,16 @@ class TestPhenotypeInitialization:
         assert ids == list(range(8))
 
     def test_phenotype_embeddings_initialized(self):
-        """Verify phenotype embeddings are not all zeros."""
+        """Verify phenotype embeddings are initialized based on characteristics."""
         encoder = StateEncoder(card_feat_dim=64, state_dim=32)
 
         for name, pid in PHENOTYPE_MAP.items():
             emb = encoder.phenotype_embed.weight[pid]
             if name == 'unknown':
                 # Unknown should be zeros
+                assert torch.allclose(emb, torch.zeros_like(emb))
+            elif name == 'variable':
+                # Variable is intentionally neutral (all 0.5 centered to 0)
                 assert torch.allclose(emb, torch.zeros_like(emb))
             else:
                 # Others should be non-zero (initialized based on characteristics)

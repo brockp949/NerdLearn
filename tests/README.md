@@ -2,7 +2,7 @@
 
 ## Overview
 
-This directory contains integration and end-to-end tests for the NerdLearn adaptive learning platform. The tests verify the complete learning flow across all microservices.
+This directory contains all tests for the NerdLearn adaptive learning platform, organized by test type and scope. The structure supports end-to-end user journeys, cross-service integration tests, isolated unit tests, and performance benchmarks.
 
 ---
 
@@ -10,13 +10,83 @@ This directory contains integration and end-to-end tests for the NerdLearn adapt
 
 ```
 tests/
-├── integration/
-│   ├── conftest.py              # Shared fixtures and configuration
-│   ├── test_learning_flow.py    # Main E2E tests
-│   └── __init__.py
+├── e2e/                          # End-to-end user journey tests
+│   ├── conftest.py               # E2E fixtures (auth, http clients)
+│   ├── learning/                 # Learning flow tests
+│   │   └── test_learning_flow.py # Complete learning session tests
+│   ├── auth/                     # Authentication flow tests
+│   └── gamification/             # Gamification flow tests
+│
+├── integration/                  # Cross-service integration tests
+│   ├── conftest.py               # Integration fixtures
+│   ├── services/                 # Service-to-service tests
+│   │   ├── test_api_scheduler.py # API <-> Scheduler tests
+│   │   └── test_orchestrator.py  # Orchestrator coordination tests
+│   └── data/                     # Data persistence tests
+│       └── test_data_persistence.py
+│
+├── unit/                         # Isolated unit tests
+│   ├── conftest.py               # Unit test fixtures (mocks)
+│   ├── swarm/                    # Swarm package tests
+│   │   └── test_fuel_meter.py    # Fuel metering tests
+│   └── packages/                 # Shared package tests
+│
+├── performance/                  # Performance & load tests
+│   ├── conftest.py               # Performance fixtures (timers, thresholds)
+│   ├── locustfiles/              # Locust load test scenarios
+│   │   └── learning_flow.py      # Learning flow load test
+│   └── benchmarks/               # Response time benchmarks
+│       └── test_response_times.py
+│
+├── fixtures/                     # Shared test data factories
+│   ├── __init__.py               # Factory exports
+│   ├── users.py                  # User data factories
+│   ├── cards.py                  # Card data factories
+│   └── sessions.py               # Session data factories
+│
+├── docs/                         # Project documentation & research
+│   ├── phases/                   # Phase implementation summaries
+│   ├── planning/                 # Project planning documents
+│   ├── operations/               # Deployment & operations guides
+│   ├── tracks/                   # Conductor tracking system
+│   └── research/                 # 40+ academic research PDFs
+│       ├── adaptive-learning/
+│       ├── algorithms/
+│       ├── architecture/
+│       ├── assessment/
+│       ├── cognitive-science/
+│       ├── gamification/
+│       ├── knowledge-graphs/
+│       └── ...
+│
+├── conftest.py                   # Root-level shared fixtures
+├── pytest.ini                    # Pytest configuration
 ├── requirements.txt              # Test dependencies
 └── README.md                     # This file
 ```
+
+### Test Tiers
+
+| Tier | Purpose | Speed | Services Required |
+|------|---------|-------|-------------------|
+| **e2e** | Full user journeys | Slow | All services |
+| **integration** | Cross-service communication | Medium | Specific services |
+| **unit** | Isolated components | Fast | None |
+| **performance** | Load & response times | Variable | All services |
+
+### Documentation & Research
+
+All project documentation and research papers are organized in `docs/`:
+
+| Folder | Contents |
+|--------|----------|
+| `docs/phases/` | Phase implementation summaries (Phase 2, 3, 4) |
+| `docs/planning/` | Bonus features plan, verification report |
+| `docs/operations/` | Deployment and production ops guides |
+| `docs/tracks/` | Conductor tracking system (current work) |
+| `docs/research/` | 40+ academic PDFs organized by topic |
+
+See [docs/README.md](docs/README.md) for full documentation index.
 
 ---
 
@@ -58,56 +128,83 @@ npx tsx prisma/seed.ts
 
 ## Running Tests
 
-### Run All Integration Tests
+### Run All Tests
 
 ```bash
-# From project root
-pytest tests/integration/
+# From tests/ directory (uses pytest.ini)
+cd tests
+pytest
 
-# With verbose output
+# Or from project root
+pytest tests/
+```
+
+### Run Tests by Tier
+
+```bash
+# End-to-end tests (requires all services)
+pytest tests/e2e/ -v
+
+# Integration tests (requires specific services)
 pytest tests/integration/ -v
 
-# With detailed output including print statements
-pytest tests/integration/ -v -s
+# Unit tests (no services required)
+pytest tests/unit/ -v
+
+# Performance tests
+pytest tests/performance/ -v
 ```
 
 ### Run Specific Test File
 
 ```bash
-pytest tests/integration/test_learning_flow.py
+# E2E learning flow tests
+pytest tests/e2e/learning/test_learning_flow.py
+
+# Unit tests for fuel meter
+pytest tests/unit/swarm/test_fuel_meter.py
 ```
 
 ### Run Specific Test
 
 ```bash
 # Run single test by name
-pytest tests/integration/test_learning_flow.py::test_start_learning_session
+pytest tests/e2e/learning/test_learning_flow.py::test_start_learning_session
 
 # Run tests matching pattern
-pytest tests/integration/ -k "session"
+pytest tests/ -k "session"
 
 # Run tests matching multiple patterns
-pytest tests/integration/ -k "session or zpd"
+pytest tests/ -k "session or zpd"
 ```
 
 ### Run Tests by Marker
 
 ```bash
+# Run only E2E tests
+pytest tests/ -m e2e
+
+# Run only integration tests
+pytest tests/ -m integration
+
 # Run only slow tests
-pytest tests/integration/ -m slow
+pytest tests/ -m slow
 
 # Skip slow tests
-pytest tests/integration/ -m "not slow"
+pytest tests/ -m "not slow"
 
 # Run only database tests
-pytest tests/integration/ -m requires_db
+pytest tests/ -m requires_db
+
+# Run performance benchmarks
+pytest tests/ -m benchmark
 ```
 
 ### Run with Coverage
 
 ```bash
 # Generate coverage report
-pytest tests/integration/ --cov=services --cov-report=html
+pytest tests/ --cov=../apps/api/app --cov-report=html
 
 # Open coverage report
 open htmlcov/index.html
@@ -119,7 +216,7 @@ open htmlcov/index.html
 
 ### 1. Service Health Checks
 
-**File:** `test_learning_flow.py::test_all_services_healthy`
+**File:** `e2e/learning/test_learning_flow.py::test_all_services_healthy`
 
 Verifies all microservices are running and responding to health checks.
 

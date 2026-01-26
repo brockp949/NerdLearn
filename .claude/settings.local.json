@@ -64,7 +64,11 @@
       "Bash(mv:*)",
       "Bash(touch:*)",
       "Bash(rm:*)",
-      "Bash(rmdir:*)"
+      "Bash(rmdir:*)",
+      "Bash(powershell -Command \"cd 'c:\\\\Users\\\\brock\\\\Documents\\\\NerdLearn\\\\NerdLearn\\\\apps\\\\api'; python -m pytest tests/unit/adaptive/neural_ode/test_hybrid_scheduler.py -v --tb=short 2>&1 | Select-Object -First 80\":*)",
+      "Bash(powershell -Command \"cd ''c:\\\\Users\\\\brock\\\\Documents\\\\NerdLearn\\\\NerdLearn\\\\apps\\\\api''; python -c ''from app.adaptive.neural_ode.hybrid_scheduler import HybridFSRSScheduler, HybridConfig, ODEState, ControlMode; print\\(\"\"Imports OK\"\"\\)'' 2>&1\")",
+      "Bash(tree:*)",
+      "Bash(ls:*)"
     ],
     "deny": [],
     "ask": []

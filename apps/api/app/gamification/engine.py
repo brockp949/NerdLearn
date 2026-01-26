@@ -2,7 +2,7 @@
 Gamification Engine
 XP, levels, streaks, achievements, and skill trees based on Octalysis framework
 """
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Any
 from datetime import datetime, timedelta
 from enum import Enum
 from pydantic import BaseModel
@@ -55,6 +55,12 @@ class GamificationEngine:
     7. Unpredictability: Random rewards
     8. Avoidance: Streak maintenance
     """
+
+    # Age Groups (Research-based stages)
+    AGE_EARLY = "early_childhood"  # 3-7
+    AGE_MIDDLE = "middle_childhood" # 8-12
+    AGE_ADOLESCENT = "adolescence" # 13-18
+    AGE_ADULT = "adult" # 18+
 
     # XP configuration
     BASE_XP = 100  # XP for level 1
@@ -153,53 +159,51 @@ class GamificationEngine:
     ]
 
     @staticmethod
-    def calculate_level(total_xp: int) -> int:
+    def get_level_curve(age_group: str) -> float:
         """
-        Calculate level from total XP using exponential formula
-
-        Formula: Level = floor(1 + sqrt(XP / BASE_XP))
-
-        Args:
-            total_xp: Total XP earned
-
-        Returns:
-            Current level
+        Research indicates different tolerance for progression speed.
+        Early childhood needs faster initial progression (higher feedback density).
         """
-        return math.floor(1 + math.sqrt(total_xp / GamificationEngine.BASE_XP))
+        if age_group == GamificationEngine.AGE_EARLY:
+            return 1.2 # Faster leveling
+        elif age_group == GamificationEngine.AGE_ADOLESCENT:
+            return 1.8 # Slower, more meaningful leveling
+        return 1.5
 
     @staticmethod
-    def xp_for_level(level: int) -> int:
+    def calculate_level(total_xp: int, age_group: str = "adult") -> int:
+        """
+        Calculate level from total XP using age-weighted formula.
+        
+        Formula: Level = floor(1 + (XP / BASE_XP) ^ (1/multiplier))
+        """
+        multiplier = GamificationEngine.get_level_curve(age_group)
+        if total_xp <= 0:
+            return 1
+        return math.floor(1 + (total_xp / GamificationEngine.BASE_XP) ** (1/multiplier))
+
+    @staticmethod
+    def xp_for_level(level: int, age_group: str = "adult") -> int:
         """
         Calculate total XP needed to reach a level
-
-        Args:
-            level: Target level
-
-        Returns:
-            Total XP required
         """
-        return int(GamificationEngine.BASE_XP * (level - 1) ** 2)
+        multiplier = GamificationEngine.get_level_curve(age_group)
+        return int(GamificationEngine.BASE_XP * (level - 1) ** multiplier)
 
     @staticmethod
-    def xp_to_next_level(current_xp: int) -> Tuple[int, int, float]:
+    def xp_to_next_level(current_xp: int, age_group: str = "adult") -> Tuple[int, int, float]:
         """
         Calculate XP needed for next level
-
-        Args:
-            current_xp: Current total XP
-
-        Returns:
-            (XP needed, Current level, Progress percentage)
         """
-        current_level = GamificationEngine.calculate_level(current_xp)
-        next_level_xp = GamificationEngine.xp_for_level(current_level + 1)
-        current_level_xp = GamificationEngine.xp_for_level(current_level)
+        current_level = GamificationEngine.calculate_level(current_xp, age_group)
+        next_level_xp = GamificationEngine.xp_for_level(current_level + 1, age_group)
+        current_level_xp = GamificationEngine.xp_for_level(current_level, age_group)
 
-        xp_needed = next_level_xp - current_xp
-        xp_in_level = current_xp - current_level_xp
-        xp_for_current_level = next_level_xp - current_level_xp
+        xp_needed = max(0, next_level_xp - current_xp)
+        xp_in_level = max(0, current_xp - current_level_xp)
+        xp_for_current_level = max(1, next_level_xp - current_level_xp)
 
-        progress = (xp_in_level / xp_for_current_level) * 100 if xp_for_current_level > 0 else 0
+        progress = (xp_in_level / xp_for_current_level) * 100
 
         return xp_needed, current_level, progress
 
@@ -207,21 +211,10 @@ class GamificationEngine:
     def calculate_streak(
         last_activity_date: Optional[datetime],
         current_streak: int,
-        streak_freezes_available: int = 0
+        streak_shields_available: int = 0
     ) -> Tuple[int, bool, bool]:
         """
-        Calculate current streak with ethical "Safe-Guard" (Streak Freeze)
-        
-        Research Foundation: Non-addictive reward schedules should minimize 
-        negative reinforcement (loss aversion) during valid life disruptions.
-
-        Args:
-            last_activity_date: Last activity timestamp
-            current_streak: Current streak count
-            streak_freezes_available: Number of freeze items owned
-
-        Returns:
-            (New streak count, Is active today, Was freeze used)
+        Calculate current streak with "Streak Shield" (Research-backed loss aversion protection).
         """
         if not last_activity_date:
             return 0, False, False
@@ -238,10 +231,9 @@ class GamificationEngine:
         if last_date == today - timedelta(days=1):
             return current_streak, False, False
 
-        # Streak potentially broken - check for freeze safe-guard
-        if streak_freezes_available > 0:
-            # We assume a freeze is used automatically if the gap is only 1 day
-            # (or for the current day if missed yesterday)
+        # Streak potentially broken - check for shield
+        if streak_shields_available > 0:
+            # If they missed yesterday (last_date was 2 days ago), shield triggers today
             if last_date == today - timedelta(days=2):
                 return current_streak, False, True
 
@@ -256,14 +248,6 @@ class GamificationEngine:
     ) -> int:
         """
         Award XP for an action
-
-        Args:
-            action: Action type
-            multiplier: XP multiplier (e.g., for events)
-            is_first_time: First time bonus
-
-        Returns:
-            XP awarded
         """
         base_xp = GamificationEngine.XP_REWARDS.get(action, 5)
 
@@ -279,13 +263,6 @@ class GamificationEngine:
     ) -> List[Achievement]:
         """
         Check which new achievements are unlocked
-
-        Args:
-            user_stats: User statistics
-            unlocked_achievement_ids: Already unlocked achievement IDs
-
-        Returns:
-            List of newly unlocked achievements
         """
         newly_unlocked = []
 
@@ -303,7 +280,6 @@ class GamificationEngine:
                     if user_value < required_value:
                         requirement_met = False
                         break
-                # Add more requirement types as needed
 
             if requirement_met:
                 newly_unlocked.append(achievement)
@@ -318,14 +294,6 @@ class GamificationEngine:
     ) -> List[SkillNode]:
         """
         Build skill tree from concepts
-
-        Args:
-            concepts: List of concept dictionaries
-            user_masteries: User mastery levels per concept
-            prerequisites: Prerequisite relationships
-
-        Returns:
-            List of skill nodes
         """
         skill_nodes = []
 
@@ -369,13 +337,6 @@ class GamificationEngine:
     ) -> Tuple[int, int, float]:
         """
         Calculate leaderboard ranking
-
-        Args:
-            user_xp: User's total XP
-            all_users_xp: List of all users' XP
-
-        Returns:
-            (Rank, Total users, Percentile)
         """
         sorted_xp = sorted(all_users_xp, reverse=True)
 
@@ -397,14 +358,6 @@ class GamificationEngine:
     ) -> int:
         """
         Calculate bonus XP from streaks and achievements
-
-        Args:
-            base_xp: Base XP for action
-            streak_days: Current streak
-            is_perfect_week: Perfect week bonus
-
-        Returns:
-            Bonus XP
         """
         bonus = 0
 

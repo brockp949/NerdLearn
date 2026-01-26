@@ -4,7 +4,9 @@ export interface QuickStatsData {
   level: number
   totalXP: number
   xpToNextLevel: number
+  levelProgress: number
   currentStreak: number
+  streakShields: number
   cardsReviewed: number
   conceptsMastered: number
 }
@@ -32,7 +34,7 @@ function StatCard({ icon, label, value, subtitle, color, showProgress, progress 
   }
 
   return (
-    <div className={`bg-gradient-to-br ${colorClasses[color]} rounded-lg p-6 text-white shadow-lg`}>
+    <div className={`bg-gradient-to-br ${colorClasses[color]} rounded-lg p-6 text-white shadow-lg relative overflow-hidden`}>
       <div className="flex items-start justify-between mb-2">
         <div className="text-3xl opacity-90">{icon}</div>
       </div>
@@ -56,10 +58,6 @@ function StatCard({ icon, label, value, subtitle, color, showProgress, progress 
 }
 
 export function QuickStats({ stats }: QuickStatsProps) {
-  const progressToNextLevel = stats.xpToNextLevel > 0
-    ? Math.round((stats.totalXP / (stats.totalXP + stats.xpToNextLevel)) * 100)
-    : 100
-
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
       <StatCard
@@ -69,14 +67,14 @@ export function QuickStats({ stats }: QuickStatsProps) {
         subtitle={`${stats.xpToNextLevel} XP to next level`}
         color="purple"
         showProgress={true}
-        progress={progressToNextLevel}
+        progress={stats.levelProgress}
       />
 
       <StatCard
         icon="📊"
         label="Total XP"
         value={stats.totalXP.toLocaleString()}
-        subtitle={`+${Math.round(stats.totalXP * 0.1)} this week`}
+        subtitle="Keep learning!"
         color="blue"
       />
 
@@ -84,7 +82,7 @@ export function QuickStats({ stats }: QuickStatsProps) {
         icon="🔥"
         label="Current Streak"
         value={`${stats.currentStreak} days`}
-        subtitle={stats.currentStreak > 0 ? 'Keep it up!' : 'Start today!'}
+        subtitle={stats.streakShields > 0 ? `🛡️ ${stats.streakShields} Shield(s) Active` : 'Keep it up!'}
         color="orange"
       />
 

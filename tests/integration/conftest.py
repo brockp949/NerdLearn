@@ -1,125 +1,127 @@
 """
-Pytest configuration and shared fixtures for integration tests
+Integration test configuration and fixtures.
+
+Integration tests validate cross-service communication and data flow.
+These tests verify that services work correctly together.
 """
 
 import pytest
-import asyncio
 import httpx
-from typing import Generator
+from typing import Dict
+
+# Import shared fixtures
+from tests.fixtures import (
+    create_test_user_data,
+    create_mock_learner_profile,
+    create_mock_card
+)
 
 
 # ============================================================================
-# Pytest Configuration
+# Service Configuration
 # ============================================================================
 
-def pytest_configure(config):
-    """Configure pytest with custom markers"""
-    config.addinivalue_line(
-        "markers", "integration: mark test as integration test (requires services running)"
-    )
-    config.addinivalue_line(
-        "markers", "slow: mark test as slow running"
-    )
-    config.addinivalue_line(
-        "markers", "requires_db: mark test as requiring database"
-    )
+API_GATEWAY_URL = "http://localhost:8000"
+ORCHESTRATOR_URL = "http://localhost:8005"
+SCHEDULER_URL = "http://localhost:8001"
+TELEMETRY_URL = "http://localhost:8002"
+INFERENCE_URL = "http://localhost:8003"
 
-
-@pytest.fixture(scope="session")
-def event_loop() -> Generator:
-    """Create event loop for async tests"""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
+TIMEOUT = 10.0
 
 
 # ============================================================================
-# Service Availability Checks
-# ============================================================================
-
-@pytest.fixture(scope="session", autouse=True)
-async def check_services_available():
-    """Check if required services are running before starting tests"""
-
-    services = {
-        "Orchestrator": "http://localhost:8005/health",
-        "Scheduler": "http://localhost:8001/health",
-        "Telemetry": "http://localhost:8002/health",
-        "Inference": "http://localhost:8003/health"
-    }
-
-    print("\n" + "="*80)
-    print("Checking service availability...")
-    print("="*80)
-
-    unavailable = []
-
-    async with httpx.AsyncClient(timeout=5.0) as client:
-        for service_name, health_url in services.items():
-            try:
-                response = await client.get(health_url)
-                if response.status_code == 200:
-                    print(f"✅ {service_name:15s} - Available")
-                else:
-                    print(f"⚠️  {service_name:15s} - Unhealthy (status {response.status_code})")
-                    unavailable.append(service_name)
-            except httpx.RequestError:
-                print(f"❌ {service_name:15s} - Not reachable")
-                unavailable.append(service_name)
-
-    print("="*80)
-
-    if unavailable:
-        print(f"\n⚠️  Warning: {len(unavailable)} service(s) unavailable: {', '.join(unavailable)}")
-        print("   Some tests may be skipped or fail.")
-        print("   Run './scripts/start-all-services.sh' to start services.\n")
-    else:
-        print("\n✅ All services available!\n")
-
-
-# ============================================================================
-# Database Utilities
+# HTTP Client Fixtures
 # ============================================================================
 
 @pytest.fixture
-def db_cleanup():
-    """Cleanup test data after tests (if needed)"""
-    yield
-    # Add cleanup logic here if needed
-    # For now, we create unique test users so no cleanup needed
+async def http_client():
+    """Async HTTP client for service requests."""
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        yield client
+
+
+@pytest.fixture
+async def api_client():
+    """HTTP client configured for API Gateway."""
+    async with httpx.AsyncClient(
+        base_url=API_GATEWAY_URL,
+        timeout=TIMEOUT
+    ) as client:
+        yield client
+
+
+@pytest.fixture
+async def orchestrator_client():
+    """HTTP client configured for Orchestrator service."""
+    async with httpx.AsyncClient(
+        base_url=ORCHESTRATOR_URL,
+        timeout=TIMEOUT
+    ) as client:
+        yield client
+
+
+@pytest.fixture
+async def scheduler_client():
+    """HTTP client configured for Scheduler service."""
+    async with httpx.AsyncClient(
+        base_url=SCHEDULER_URL,
+        timeout=TIMEOUT
+    ) as client:
+        yield client
 
 
 # ============================================================================
-# Mock Data Generators
+# Service Health Fixtures
+# ============================================================================
+
+@pytest.fixture
+async def ensure_api_healthy(api_client):
+    """Ensure API Gateway is healthy before test."""
+    try:
+        response = await api_client.get("/health")
+        if response.status_code != 200:
+            pytest.skip("API Gateway not healthy")
+    except httpx.RequestError:
+        pytest.skip("API Gateway not reachable")
+
+
+@pytest.fixture
+async def ensure_orchestrator_healthy(orchestrator_client):
+    """Ensure Orchestrator is healthy before test."""
+    try:
+        response = await orchestrator_client.get("/health")
+        if response.status_code != 200:
+            pytest.skip("Orchestrator not healthy")
+    except httpx.RequestError:
+        pytest.skip("Orchestrator not reachable")
+
+
+@pytest.fixture
+async def ensure_scheduler_healthy(scheduler_client):
+    """Ensure Scheduler is healthy before test."""
+    try:
+        response = await scheduler_client.get("/health")
+        if response.status_code != 200:
+            pytest.skip("Scheduler not healthy")
+    except httpx.RequestError:
+        pytest.skip("Scheduler not reachable")
+
+
+# ============================================================================
+# Mock Data Fixtures
 # ============================================================================
 
 @pytest.fixture
 def mock_learner_profile():
-    """Generate mock learner profile data"""
-    return {
-        "fsrs_stability": 2.5,
-        "fsrs_difficulty": 5.0,
-        "current_zpd_lower": 0.35,
-        "current_zpd_upper": 0.70,
-        "total_xp": 0,
-        "level": 1,
-        "streak_days": 0
-    }
+    """Generate mock learner profile data."""
+    return create_mock_learner_profile()
 
 
 @pytest.fixture
 def mock_card_data():
-    """Generate mock card data"""
-    return {
-        "card_id": "test_card_123",
-        "concept_id": "test_concept_python_vars",
-        "concept_name": "Python Variables",
-        "content": "**Variables** are containers for storing data values.",
-        "question": "What keyword is used to assign a value to a variable?",
-        "correct_answer": "=",
-        "difficulty": 3.5,
-        "card_type": "BASIC"
-    }
+    """Generate mock card data."""
+    return create_mock_card()
 
 
 # ============================================================================
@@ -128,28 +130,12 @@ def mock_card_data():
 
 @pytest.fixture
 def assert_response_time():
-    """Helper to assert response time is within threshold"""
+    """Helper to assert response time is within threshold."""
     def _assert(duration_ms: float, threshold_ms: float, operation: str):
         assert duration_ms < threshold_ms, (
             f"{operation} took {duration_ms:.0f}ms "
             f"(threshold: {threshold_ms}ms)"
         )
-        print(f"   ⏱️  {operation}: {duration_ms:.0f}ms")
-
-    return _assert
-
-
-@pytest.fixture
-def assert_xp_order():
-    """Helper to assert XP follows expected ordering"""
-    def _assert(xp_results: dict):
-        """Verify again < hard < good < easy"""
-        if "again" in xp_results and "good" in xp_results:
-            assert xp_results["again"] < xp_results["good"]
-        if "hard" in xp_results and "good" in xp_results:
-            assert xp_results["hard"] < xp_results["good"]
-        if "good" in xp_results and "easy" in xp_results:
-            assert xp_results["good"] < xp_results["easy"]
-        print(f"   ✅ XP ordering correct")
+        print(f"  {operation}: {duration_ms:.0f}ms")
 
     return _assert

@@ -34,6 +34,7 @@ from app.adaptive.interleaved import (
     PracticeItem,
     ConceptProficiency,
 )
+from app.gamification.variable_rewards import VariableRewardEngine
 from app.services.scaffolding_service import ScaffoldingService, get_scaffolding_service, HintRequest, HintResponse
 from pydantic import BaseModel, Field
 from enum import Enum
@@ -46,6 +47,7 @@ bkt = BayesianKnowledgeTracer()
 zpd = ZPDRegulator()
 cognitive_load_estimator = CognitiveLoadEstimator()
 interleaved_scheduler = InterleavedScheduler()
+vr_engine = VariableRewardEngine()
 
 
 class ReviewRating(str, Enum):
@@ -1312,6 +1314,13 @@ async def crl_update_state(
         # Get updated state
         belief_state = td_bkt.get_belief_state()
         concept_state = belief_state.concepts.get(concept_id)
+        mastery = concept_state.mastery if concept_state else 0.0
+
+        # Variable Reward Trigger (Research-backed VR schedule)
+        # Higher mastery = lower extrinsic reward probability (Fading)
+        reward_item = None
+        if request.correct:
+            reward_item = vr_engine.trigger_reward(mastery)
 
         # Calculate reward (for logging/analysis)
         reward_calc = RewardCalculator(hlr)
@@ -1333,17 +1342,18 @@ async def crl_update_state(
         mastery_record = result.scalar_one_or_none()
 
         if mastery_record:
-            mastery_record.mastery_level = concept_state.mastery if concept_state else mastery_record.mastery_level
+            mastery_record.mastery_level = mastery
             mastery_record.practice_count += 1
             mastery_record.last_practiced = timestamp
             await db.commit()
 
         return {
             "concept_id": request.concept_id,
-            "updated_mastery": concept_state.mastery if concept_state else 0.0,
+            "updated_mastery": mastery,
             "half_life_hours": concept_state.half_life_hours if concept_state else 24.0,
             "reward": reward,
             "recall_probability": concept_state.compute_recall_probability() if concept_state else 0.0,
+            "variable_reward": reward_item.dict() if reward_item else None,
         }
 
     except Exception as e:
@@ -1745,4 +1755,625 @@ async def get_causal_edges(
 
     except Exception as e:
         logger.error(f"Failed to get causal edges for course {course_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============== Neural ODE Scheduling ==============
+# Hybrid FSRS/Neural ODE scheduling with uncertainty quantification
+
+from app.models.neural_ode import ODECardState, MemoryStateTrajectory
+
+
+class NeuralODEScheduleRequest(BaseModel):
+    """Request for Neural ODE scheduling"""
+    user_id: int = Field(..., description="User ID")
+    concept_id: int = Field(..., description="Concept ID")
+    current_fsrs_interval_days: Optional[float] = Field(default=None, description="Current FSRS interval")
+
+
+class NeuralODEStateResponse(BaseModel):
+    """Response model for Neural ODE state"""
+    user_id: int
+    concept_id: int
+    control_mode: str
+    ode_confidence: float
+    review_count: int
+    current_retrievability: Optional[float]
+    uncertainty_epistemic: Optional[float]
+    uncertainty_aleatoric: Optional[float]
+    recommended_interval_days: float
+
+
+class NeuralODEReviewRequest(BaseModel):
+    """Request for updating Neural ODE state after review"""
+    user_id: int = Field(..., description="User ID")
+    concept_id: int = Field(..., description="Concept ID")
+    grade: int = Field(..., ge=1, le=4, description="Grade 1-4 (Again, Hard, Good, Easy)")
+    response_time_ms: int = Field(..., description="Response time in milliseconds")
+    hesitation_count: Optional[int] = Field(default=0, description="Number of hesitation pauses")
+    cursor_tortuosity: Optional[float] = Field(default=1.0, description="Cursor path tortuosity")
+
+
+@router.post("/neural-ode/schedule")
+async def schedule_neural_ode_review(
+    request: NeuralODEScheduleRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Schedule next review using Hybrid FSRS/Neural ODE system.
+
+    Control modes (from CT-MCN paper):
+    - SHADOW: Neural ODE runs but FSRS decides (< 20 reviews or < 0.5 confidence)
+    - HYBRID: Confidence-weighted blend (20-50 reviews, >= 0.5 confidence)
+    - ACTIVE: Neural ODE fully controls (>= 50 reviews, >= 0.8 confidence)
+
+    Returns recommended interval with uncertainty estimates.
+    """
+    try:
+        from app.adaptive.neural_ode.hybrid_scheduler import (
+            HybridFSRSScheduler,
+            HybridConfig,
+            ODEState,
+            ControlMode,
+        )
+
+        # Get or create ODE state
+        result = await db.execute(
+            select(ODECardState).where(
+                and_(
+                    ODECardState.user_id == request.user_id,
+                    ODECardState.concept_id == request.concept_id,
+                )
+            )
+        )
+        ode_card_state = result.scalar_one_or_none()
+
+        if not ode_card_state:
+            # Create new state with default values
+            ode_card_state = ODECardState(
+                user_id=request.user_id,
+                concept_id=request.concept_id,
+                current_latent_state=[0.0] * 32,
+                last_state_time=datetime.utcnow(),
+                control_mode="shadow",
+                ode_confidence=0.0,
+                review_count=0,
+            )
+            db.add(ode_card_state)
+            await db.flush()
+
+        # Convert to ODEState for scheduler
+        import torch
+        ode_state = ODEState(
+            latent_state=torch.tensor(ode_card_state.current_latent_state or [0.0] * 32),
+            last_update_time=ode_card_state.last_state_time or datetime.utcnow(),
+            review_count=ode_card_state.review_count or 0,
+            ode_confidence=ode_card_state.ode_confidence or 0.0,
+        )
+
+        # Initialize scheduler
+        config = HybridConfig()
+        scheduler = HybridFSRSScheduler(config=config)
+
+        # Determine control mode
+        control_mode = scheduler.determine_control_mode(ode_state)
+
+        # Get FSRS interval
+        fsrs_interval = request.current_fsrs_interval_days or 1.0
+
+        # Get scheduling result
+        card_features = torch.randn(64)  # Placeholder - in production, extract from concept
+        scheduling_result = scheduler.schedule_review(
+            ode_state=ode_state,
+            fsrs_interval_days=fsrs_interval,
+            card_features=card_features,
+        )
+
+        # Update database state
+        ode_card_state.control_mode = control_mode.value
+        await db.commit()
+
+        return {
+            "user_id": request.user_id,
+            "concept_id": request.concept_id,
+            "control_mode": scheduling_result.control_mode.value,
+            "recommended_interval_days": scheduling_result.recommended_interval_days,
+            "fsrs_interval_days": scheduling_result.fsrs_interval_days,
+            "ode_interval_days": scheduling_result.ode_interval_days,
+            "blend_weight": scheduling_result.blend_weight,
+            "ode_confidence": scheduling_result.ode_confidence,
+            "predicted_retention": scheduling_result.predicted_retention,
+            "uncertainty_epistemic": scheduling_result.uncertainty_epistemic,
+            "uncertainty_aleatoric": scheduling_result.uncertainty_aleatoric,
+            "rationale": scheduling_result.rationale,
+        }
+
+    except ImportError as e:
+        logger.warning(f"Neural ODE module not available: {e}")
+        return {
+            "user_id": request.user_id,
+            "concept_id": request.concept_id,
+            "control_mode": "shadow",
+            "recommended_interval_days": request.current_fsrs_interval_days or 1.0,
+            "fsrs_interval_days": request.current_fsrs_interval_days or 1.0,
+            "ode_interval_days": None,
+            "blend_weight": 0.0,
+            "ode_confidence": 0.0,
+            "predicted_retention": None,
+            "uncertainty_epistemic": None,
+            "uncertainty_aleatoric": None,
+            "rationale": "Neural ODE not available, using FSRS only",
+        }
+    except Exception as e:
+        logger.error(f"Neural ODE scheduling error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/neural-ode/state/{user_id}/{concept_id}")
+async def get_neural_ode_state(
+    user_id: int,
+    concept_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get current Neural ODE state for a user-concept pair.
+
+    Returns control mode, confidence, uncertainty estimates,
+    and current retrievability prediction.
+    """
+    try:
+        # Get ODE state
+        result = await db.execute(
+            select(ODECardState).where(
+                and_(
+                    ODECardState.user_id == user_id,
+                    ODECardState.concept_id == concept_id,
+                )
+            )
+        )
+        ode_card_state = result.scalar_one_or_none()
+
+        if not ode_card_state:
+            return {
+                "user_id": user_id,
+                "concept_id": concept_id,
+                "control_mode": "shadow",
+                "ode_confidence": 0.0,
+                "review_count": 0,
+                "current_retrievability": None,
+                "uncertainty_epistemic": None,
+                "uncertainty_aleatoric": None,
+                "recommended_interval_days": 1.0,
+                "message": "No ODE state exists yet for this user-concept pair",
+            }
+
+        # Get latest trajectory point for uncertainty
+        trajectory_result = await db.execute(
+            select(MemoryStateTrajectory)
+            .where(
+                and_(
+                    MemoryStateTrajectory.user_id == user_id,
+                    MemoryStateTrajectory.concept_id == concept_id,
+                )
+            )
+            .order_by(MemoryStateTrajectory.timestamp.desc())
+            .limit(1)
+        )
+        latest_trajectory = trajectory_result.scalar_one_or_none()
+
+        return {
+            "user_id": user_id,
+            "concept_id": concept_id,
+            "control_mode": ode_card_state.control_mode or "shadow",
+            "ode_confidence": ode_card_state.ode_confidence or 0.0,
+            "review_count": ode_card_state.review_count or 0,
+            "current_retrievability": latest_trajectory.predicted_retrievability if latest_trajectory else None,
+            "uncertainty_epistemic": latest_trajectory.uncertainty_epistemic if latest_trajectory else None,
+            "uncertainty_aleatoric": latest_trajectory.uncertainty_aleatoric if latest_trajectory else None,
+            "last_state_time": ode_card_state.last_state_time.isoformat() if ode_card_state.last_state_time else None,
+            "model_version": ode_card_state.model_version or 0,
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting Neural ODE state: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/neural-ode/review")
+async def process_neural_ode_review(
+    request: NeuralODEReviewRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Process a review outcome and update Neural ODE state.
+
+    Updates:
+    - Latent state via jump network
+    - ODE confidence based on prediction accuracy
+    - Review count and control mode
+
+    Returns updated state and next review recommendation.
+    """
+    try:
+        from app.adaptive.neural_ode.hybrid_scheduler import (
+            HybridFSRSScheduler,
+            HybridConfig,
+            ODEState,
+        )
+
+        # Get ODE state
+        result = await db.execute(
+            select(ODECardState).where(
+                and_(
+                    ODECardState.user_id == request.user_id,
+                    ODECardState.concept_id == request.concept_id,
+                )
+            )
+        )
+        ode_card_state = result.scalar_one_or_none()
+
+        if not ode_card_state:
+            ode_card_state = ODECardState(
+                user_id=request.user_id,
+                concept_id=request.concept_id,
+                current_latent_state=[0.0] * 32,
+                last_state_time=datetime.utcnow(),
+                control_mode="shadow",
+                ode_confidence=0.0,
+                review_count=0,
+            )
+            db.add(ode_card_state)
+
+        # Convert to ODEState
+        import torch
+        ode_state = ODEState(
+            latent_state=torch.tensor(ode_card_state.current_latent_state or [0.0] * 32),
+            last_update_time=ode_card_state.last_state_time or datetime.utcnow(),
+            review_count=ode_card_state.review_count or 0,
+            ode_confidence=ode_card_state.ode_confidence or 0.0,
+        )
+
+        # Initialize scheduler
+        config = HybridConfig()
+        scheduler = HybridFSRSScheduler(config=config)
+
+        # Create telemetry tensor
+        telemetry = torch.tensor([
+            min(request.response_time_ms / 30000.0, 1.0),  # Normalized RT
+            min((request.hesitation_count or 0) / 5.0, 1.0),  # Normalized hesitation
+            request.cursor_tortuosity or 1.0,  # Tortuosity
+            1.0 if request.grade >= 3 else 0.5,  # Fluency proxy
+        ])
+
+        # Process review
+        updated_state = scheduler.process_review_outcome(
+            ode_state=ode_state,
+            grade=request.grade,
+            telemetry=telemetry,
+        )
+
+        # Update database
+        ode_card_state.current_latent_state = updated_state.latent_state.tolist()
+        ode_card_state.last_state_time = updated_state.last_update_time
+        ode_card_state.review_count = updated_state.review_count
+        ode_card_state.ode_confidence = updated_state.ode_confidence
+        ode_card_state.control_mode = scheduler.determine_control_mode(updated_state).value
+
+        await db.commit()
+        await db.refresh(ode_card_state)
+
+        return {
+            "user_id": request.user_id,
+            "concept_id": request.concept_id,
+            "updated_review_count": ode_card_state.review_count,
+            "updated_confidence": ode_card_state.ode_confidence,
+            "control_mode": ode_card_state.control_mode,
+            "message": f"Processed grade {request.grade} review",
+        }
+
+    except ImportError as e:
+        logger.warning(f"Neural ODE module not available: {e}")
+        # Update review count anyway
+        result = await db.execute(
+            select(ODECardState).where(
+                and_(
+                    ODECardState.user_id == request.user_id,
+                    ODECardState.concept_id == request.concept_id,
+                )
+            )
+        )
+        ode_card_state = result.scalar_one_or_none()
+        if ode_card_state:
+            ode_card_state.review_count = (ode_card_state.review_count or 0) + 1
+            await db.commit()
+
+        return {
+            "user_id": request.user_id,
+            "concept_id": request.concept_id,
+            "updated_review_count": ode_card_state.review_count if ode_card_state else 1,
+            "updated_confidence": 0.0,
+            "control_mode": "shadow",
+            "message": "Neural ODE not available, review count updated only",
+        }
+    except Exception as e:
+        logger.error(f"Neural ODE review processing error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============== JCI (Joint Causal Inference) Endpoints ==============
+# Combine observational + experimental evidence for causal graph updates
+
+from app.models.jci import ExperimentEdge, ExperimentEdgeStatus, EdgeValidationQueue
+
+
+class JCIExperimentLinkRequest(BaseModel):
+    """Request to link an experiment to a causal edge"""
+    experiment_id: str = Field(..., description="A/B experiment ID")
+    source_concept: str = Field(..., description="Source concept name")
+    target_concept: str = Field(..., description="Target concept name")
+    prior_confidence: float = Field(..., ge=0, le=1, description="Prior confidence from observational data")
+    course_id: Optional[int] = Field(default=None, description="Course ID")
+    treatment_description: Optional[str] = Field(default=None, description="Description of the intervention")
+    control_description: Optional[str] = Field(default=None, description="Description of control condition")
+
+
+class JCIExperimentCompleteRequest(BaseModel):
+    """Request to process completed experiment"""
+    experiment_id: str = Field(..., description="Completed A/B experiment ID")
+
+
+class JCIRecommendExperimentsRequest(BaseModel):
+    """Request for experiment recommendations"""
+    course_id: int = Field(..., description="Course ID")
+    max_recommendations: int = Field(default=5, ge=1, le=20, description="Maximum recommendations")
+
+
+@router.post("/causal/link-experiment")
+async def link_experiment_to_edge(
+    request: JCIExperimentLinkRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Link an A/B experiment to a causal edge for validation.
+
+    When you want to validate a hypothesized causal relationship A→B
+    through experimentation, create this link before running the experiment.
+
+    The JCI framework will then:
+    1. Track the experiment results
+    2. Perform Bayesian update on edge confidence
+    3. Sync updated confidence to the knowledge graph
+    """
+    try:
+        from app.adaptive.causal_discovery.jci_updater import JCIConfidenceUpdater
+        from app.services.graph_service import AsyncGraphService
+
+        graph_service = AsyncGraphService(db)
+        updater = JCIConfidenceUpdater(db, graph_service)
+
+        experiment_edge = await updater.create_experiment_edge_link(
+            experiment_id=request.experiment_id,
+            source_concept=request.source_concept,
+            target_concept=request.target_concept,
+            prior_confidence=request.prior_confidence,
+            course_id=request.course_id,
+            treatment_description=request.treatment_description,
+            control_description=request.control_description,
+        )
+
+        return {
+            "experiment_edge_id": experiment_edge.id,
+            "experiment_id": experiment_edge.experiment_id,
+            "source_concept": experiment_edge.source_concept,
+            "target_concept": experiment_edge.target_concept,
+            "prior_confidence": experiment_edge.prior_confidence,
+            "status": experiment_edge.status.value,
+            "message": "Experiment-edge link created successfully",
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to link experiment to edge: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/causal/experiment-completed")
+async def process_experiment_completion(
+    request: JCIExperimentCompleteRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Process a completed A/B experiment and update causal edge confidence.
+
+    This endpoint:
+    1. Fetches experiment results from A/B testing framework
+    2. Performs Bayesian update on all linked edges
+    3. Syncs updated confidence to the knowledge graph
+
+    Call this when an experiment reaches statistical significance
+    or is terminated.
+    """
+    try:
+        from app.adaptive.causal_discovery.jci_updater import JCIConfidenceUpdater
+        from app.services.graph_service import AsyncGraphService
+
+        graph_service = AsyncGraphService(db)
+        updater = JCIConfidenceUpdater(db, graph_service)
+
+        updates = await updater.process_experiment_completion(request.experiment_id)
+
+        return {
+            "experiment_id": request.experiment_id,
+            "edges_updated": len(updates),
+            "updates": [
+                {
+                    "prior": u.prior,
+                    "posterior": u.posterior,
+                    "likelihood_ratio": u.likelihood_ratio,
+                    "evidence_strength": u.evidence_strength,
+                    "update_reason": u.update_reason,
+                }
+                for u in updates
+            ],
+            "message": f"Processed {len(updates)} edge updates from experiment",
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to process experiment completion: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/causal/recommend-experiments")
+async def recommend_causal_experiments(
+    request: JCIRecommendExperimentsRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Recommend experiments to validate uncertain causal edges.
+
+    Uses active learning to identify edges with:
+    - High uncertainty (confidence near 0.5)
+    - High information gain potential
+    - Feasible sample size requirements
+
+    These are edges where an A/B test would most reduce
+    our uncertainty about the causal relationship.
+    """
+    try:
+        from app.adaptive.causal_discovery.jci_updater import JCIConfidenceUpdater
+        from app.services.graph_service import AsyncGraphService
+
+        graph_service = AsyncGraphService(db)
+        updater = JCIConfidenceUpdater(db, graph_service)
+
+        recommendations = await updater.recommend_experiments(
+            course_id=request.course_id,
+            max_recommendations=request.max_recommendations,
+        )
+
+        return {
+            "course_id": request.course_id,
+            "recommendation_count": len(recommendations),
+            "recommendations": [
+                {
+                    "source_concept": r["source"],
+                    "target_concept": r["target"],
+                    "current_confidence": r["current_confidence"],
+                    "entropy": r["entropy"],
+                    "priority_score": r["priority"],
+                    "rationale": f"High uncertainty (conf={r['current_confidence']:.2f}), information gain={r['entropy']:.3f}",
+                }
+                for r in recommendations
+            ],
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to recommend experiments: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/causal/experiment-edges/{course_id}")
+async def get_experiment_edges(
+    course_id: int,
+    status: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get experiment-edge links for a course.
+
+    Returns all A/B experiments linked to causal edges,
+    with their status and confidence updates.
+    """
+    try:
+        query = select(ExperimentEdge).where(ExperimentEdge.course_id == course_id)
+
+        if status:
+            try:
+                status_enum = ExperimentEdgeStatus(status)
+                query = query.where(ExperimentEdge.status == status_enum)
+            except ValueError:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid status: {status}. Valid values: pending, running, completed, validated, invalidated"
+                )
+
+        result = await db.execute(query)
+        edges = result.scalars().all()
+
+        return {
+            "course_id": course_id,
+            "filter_status": status,
+            "count": len(edges),
+            "experiment_edges": [
+                {
+                    "id": e.id,
+                    "experiment_id": e.experiment_id,
+                    "source_concept": e.source_concept,
+                    "target_concept": e.target_concept,
+                    "prior_confidence": e.prior_confidence,
+                    "posterior_confidence": e.posterior_confidence,
+                    "experiment_effect_size": e.experiment_effect_size,
+                    "experiment_p_value": e.experiment_p_value,
+                    "status": e.status.value,
+                    "created_at": e.created_at.isoformat() if e.created_at else None,
+                    "experiment_completed_at": e.experiment_completed_at.isoformat() if e.experiment_completed_at else None,
+                }
+                for e in edges
+            ],
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get experiment edges: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/causal/validation-queue/{course_id}")
+async def get_validation_queue(
+    course_id: int,
+    limit: int = 10,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get the edge validation queue for a course.
+
+    Returns edges prioritized for experimental validation,
+    sorted by priority score (entropy * feasibility).
+    """
+    try:
+        result = await db.execute(
+            select(EdgeValidationQueue)
+            .where(
+                and_(
+                    EdgeValidationQueue.course_id == course_id,
+                    EdgeValidationQueue.status == "pending",
+                )
+            )
+            .order_by(EdgeValidationQueue.priority_score.desc())
+            .limit(limit)
+        )
+        queue_items = result.scalars().all()
+
+        return {
+            "course_id": course_id,
+            "queue_length": len(queue_items),
+            "items": [
+                {
+                    "id": item.id,
+                    "source_concept": item.source_concept,
+                    "target_concept": item.target_concept,
+                    "priority_score": item.priority_score,
+                    "information_gain": item.information_gain,
+                    "uncertainty": item.uncertainty,
+                    "current_confidence": item.current_confidence,
+                    "estimated_sample_size": item.estimated_sample_size,
+                    "feasibility_score": item.feasibility_score,
+                    "queued_at": item.queued_at.isoformat() if item.queued_at else None,
+                }
+                for item in queue_items
+            ],
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to get validation queue: {e}")
         raise HTTPException(status_code=500, detail=str(e))

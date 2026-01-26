@@ -15,7 +15,10 @@ from app.models.assessment import UserConceptMastery
 from app.gamification import GamificationEngine
 from pydantic import BaseModel
 
+from app.gamification.variable_rewards import VariableRewardEngine
+
 router = APIRouter()
+vr_engine = VariableRewardEngine()
 
 
 class XPAwardRequest(BaseModel):
@@ -62,7 +65,8 @@ async def award_xp(
     # Update user XP and level
     old_level = user.level
     user.total_xp += total_xp
-    user.level = GamificationEngine.calculate_level(user.total_xp)
+    # TODO: Get actual user age group from profile
+    user.level = GamificationEngine.calculate_level(user.total_xp, age_group="adult")
     user.last_activity_date = datetime.now()
 
     # Update streak
@@ -370,4 +374,43 @@ async def get_leaderboard(
         "time_period": time_period,
         "total_users": len(leaderboard),
         "leaderboard": leaderboard,
+    }
+
+
+class RewardTriggerRequest(BaseModel):
+    user_id: int
+    mastery_level: float
+    age_group: str = "adult"
+
+
+@router.post("/trigger-reward")
+async def trigger_reward(
+    request: RewardTriggerRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Manually trigger a reward roll (e.g. at the end of a session).
+    
+    Uses research-backed Variable Ratio (VR) schedule and Fading.
+    """
+    reward = vr_engine.trigger_reward(request.mastery_level)
+    
+    if not reward:
+        return {"reward_earned": False}
+        
+    feedback = vr_engine.get_reward_feedback(reward, request.age_group)
+    
+    # If reward is XP, award it
+    if reward.reward_type == "xp":
+        # Get user
+        result = await db.execute(select(User).where(User.id == request.user_id))
+        user = result.scalar_one_or_none()
+        if user:
+            user.total_xp += reward.value
+            await db.commit()
+            
+    return {
+        "reward_earned": True,
+        "reward": reward.dict(),
+        "feedback": feedback
     }

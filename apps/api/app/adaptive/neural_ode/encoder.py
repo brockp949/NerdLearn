@@ -27,14 +27,15 @@ PHENOTYPE_MAP = {
 }
 
 # Phenotype characteristics for initialization priors
+# Each phenotype has distinct characteristics that affect memory dynamics
 PHENOTYPE_CHARACTERISTICS = {
-    'fast_forgetter': {'decay_rate': 0.8, 'encoding_strength': 0.6, 'consolidation': 0.4},
-    'steady_learner': {'decay_rate': 0.4, 'encoding_strength': 0.7, 'consolidation': 0.7},
-    'cramper': {'decay_rate': 0.6, 'encoding_strength': 0.9, 'consolidation': 0.3},
-    'deep_processor': {'decay_rate': 0.3, 'encoding_strength': 0.8, 'consolidation': 0.8},
-    'night_owl': {'decay_rate': 0.5, 'encoding_strength': 0.7, 'consolidation': 0.6},
-    'morning_lark': {'decay_rate': 0.5, 'encoding_strength': 0.7, 'consolidation': 0.6},
-    'variable': {'decay_rate': 0.5, 'encoding_strength': 0.5, 'consolidation': 0.5},
+    'fast_forgetter': {'decay_rate': 0.8, 'encoding_strength': 0.6, 'consolidation': 0.4, 'circadian_phase': 0.0},
+    'steady_learner': {'decay_rate': 0.4, 'encoding_strength': 0.7, 'consolidation': 0.7, 'circadian_phase': 0.0},
+    'cramper': {'decay_rate': 0.6, 'encoding_strength': 0.9, 'consolidation': 0.3, 'circadian_phase': 0.0},
+    'deep_processor': {'decay_rate': 0.3, 'encoding_strength': 0.8, 'consolidation': 0.8, 'circadian_phase': 0.0},
+    'night_owl': {'decay_rate': 0.5, 'encoding_strength': 0.7, 'consolidation': 0.6, 'circadian_phase': 0.8},  # Late peak
+    'morning_lark': {'decay_rate': 0.5, 'encoding_strength': 0.7, 'consolidation': 0.6, 'circadian_phase': 0.2},  # Early peak
+    'variable': {'decay_rate': 0.5, 'encoding_strength': 0.5, 'consolidation': 0.5, 'circadian_phase': 0.5},
 }
 
 
@@ -126,22 +127,25 @@ class StateEncoder(nn.Module):
         """Initialize phenotype embeddings with semantic structure."""
         with torch.no_grad():
             # Unknown phenotype: neutral initialization
-            self.phenotype_embed.weight[0] = torch.zeros(embed_dim)
+            self.phenotype_embed.weight.data[0] = torch.zeros(embed_dim)
 
             # Initialize based on phenotype characteristics
             for name, idx in PHENOTYPE_MAP.items():
                 if idx == 0:
                     continue
                 chars = PHENOTYPE_CHARACTERISTICS.get(name, {})
-                # Create embedding that encodes decay/encoding/consolidation tendencies
+                # Create embedding that encodes decay/encoding/consolidation/circadian tendencies
                 embed = torch.zeros(embed_dim)
-                # First third encodes decay tendency (higher = faster decay)
-                embed[:embed_dim // 3] = chars.get('decay_rate', 0.5) - 0.5
-                # Second third encodes encoding strength
-                embed[embed_dim // 3:2 * embed_dim // 3] = chars.get('encoding_strength', 0.5) - 0.5
-                # Last third encodes consolidation
-                embed[2 * embed_dim // 3:] = chars.get('consolidation', 0.5) - 0.5
-                self.phenotype_embed.weight[idx] = embed
+                quarter = embed_dim // 4
+                # First quarter encodes decay tendency (higher = faster decay)
+                embed[:quarter] = chars.get('decay_rate', 0.5) - 0.5
+                # Second quarter encodes encoding strength
+                embed[quarter:2 * quarter] = chars.get('encoding_strength', 0.5) - 0.5
+                # Third quarter encodes consolidation
+                embed[2 * quarter:3 * quarter] = chars.get('consolidation', 0.5) - 0.5
+                # Fourth quarter encodes circadian phase preference
+                embed[3 * quarter:] = chars.get('circadian_phase', 0.5) - 0.5
+                self.phenotype_embed.weight.data[idx] = embed
 
     def forward(
         self,
