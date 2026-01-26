@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback, memo } from 'react'
 
 export interface LearningCard {
   card_id: string
@@ -21,25 +21,25 @@ interface QuestionCardProps {
   loading?: boolean
 }
 
-export function QuestionCard({ card, onAnswer, loading }: QuestionCardProps) {
+const RATING_BUTTONS = [
+  { rating: 'again' as Rating, label: 'Again', color: 'bg-red-500 hover:bg-red-600', emoji: '\u274c' },
+  { rating: 'hard' as Rating, label: 'Hard', color: 'bg-orange-500 hover:bg-orange-600', emoji: '\ud83d\ude13' },
+  { rating: 'good' as Rating, label: 'Good', color: 'bg-green-500 hover:bg-green-600', emoji: '\u2705' },
+  { rating: 'easy' as Rating, label: 'Easy', color: 'bg-blue-500 hover:bg-blue-600', emoji: '\ud83c\udfaf' },
+] as const
+
+export const QuestionCard = memo(function QuestionCard({ card, onAnswer, loading }: QuestionCardProps) {
   const [showAnswer, setShowAnswer] = useState(false)
   const [selectedRating, setSelectedRating] = useState<Rating | null>(null)
 
-  const handleAnswer = (rating: Rating) => {
+  const handleAnswer = useCallback((rating: Rating) => {
     setSelectedRating(rating)
     setTimeout(() => {
       onAnswer(rating)
       setShowAnswer(false)
       setSelectedRating(null)
     }, 300)
-  }
-
-  const ratingButtons = [
-    { rating: 'again' as Rating, label: 'Again', color: 'bg-red-500 hover:bg-red-600', emoji: '❌' },
-    { rating: 'hard' as Rating, label: 'Hard', color: 'bg-orange-500 hover:bg-orange-600', emoji: '😓' },
-    { rating: 'good' as Rating, label: 'Good', color: 'bg-green-500 hover:bg-green-600', emoji: '✅' },
-    { rating: 'easy' as Rating, label: 'Easy', color: 'bg-blue-500 hover:bg-blue-600', emoji: '🎯' },
-  ]
+  }, [onAnswer])
 
   return (
     <div className="bg-white rounded-lg shadow-lg p-8 max-w-3xl mx-auto relative overflow-hidden">
@@ -106,7 +106,7 @@ export function QuestionCard({ card, onAnswer, loading }: QuestionCardProps) {
 
           {/* Rating Buttons */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {ratingButtons.map(({ rating, label, color, emoji }) => (
+            {RATING_BUTTONS.map(({ rating, label, color, emoji }) => (
               <button
                 key={rating}
                 onClick={() => handleAnswer(rating)}
@@ -147,4 +147,4 @@ export function QuestionCard({ card, onAnswer, loading }: QuestionCardProps) {
       )}
     </div>
   )
-}
+})

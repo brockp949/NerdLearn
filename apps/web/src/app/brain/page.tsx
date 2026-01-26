@@ -14,6 +14,7 @@ const ForceGraph3D = dynamic(() => import('react-force-graph-3d'), { ssr: false 
 export default function BrainPage() {
     const { data: graphData, loading } = useGraphData();
     const graphRef = useRef<any>(null);
+    const meshRefs = useRef<THREE.Mesh[]>([]);
 
     const nodeThreeObject = useMemo(() => (node: any) => {
         const n = node as GraphNode;
@@ -31,6 +32,9 @@ export default function BrainPage() {
 
         const mesh = new THREE.Mesh(geometry, material);
 
+        // Track mesh for optimized animation (avoids scene traversal)
+        meshRefs.current.push(mesh);
+
         // Add a subtle bloom-like aura if mastery is high (placeholder logic)
         if (n.difficulty !== undefined && n.difficulty < 3) {
             const auraGeom = new THREE.SphereGeometry(8);
@@ -46,23 +50,28 @@ export default function BrainPage() {
         return mesh;
     }, []);
 
-    // Animation hook for pulsing
+    // Optimized animation hook - direct mesh iteration instead of scene traversal
     useEffect(() => {
         if (!graphRef.current) return;
 
         let frameId: number;
         const animate = () => {
             const time = Date.now() * 0.002;
-            graphRef.current.scene().traverse((obj: any) => {
-                if (obj.isMesh && obj.material && obj.material.emissiveIntensity !== undefined) {
-                    obj.material.emissiveIntensity = 0.5 + Math.sin(time + obj.id) * 0.5;
+            // Direct array iteration is O(n) without scene tree overhead
+            for (const mesh of meshRefs.current) {
+                if (mesh.material && 'emissiveIntensity' in mesh.material) {
+                    (mesh.material as THREE.MeshStandardMaterial).emissiveIntensity =
+                        0.5 + Math.sin(time + mesh.id) * 0.5;
                 }
-            });
+            }
             frameId = requestAnimationFrame(animate);
         };
 
         frameId = requestAnimationFrame(animate);
-        return () => cancelAnimationFrame(frameId);
+        return () => {
+            cancelAnimationFrame(frameId);
+            meshRefs.current = []; // Clean up mesh references
+        };
     }, [loading]);
 
     if (loading) {

@@ -1,3 +1,5 @@
+"use client";
+
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { TelemetryClient, EngagementScore, Intervention } from '@/lib/telemetry';
 import { v4 as uuidv4 } from 'uuid';

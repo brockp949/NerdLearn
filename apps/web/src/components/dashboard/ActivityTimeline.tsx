@@ -1,5 +1,6 @@
 'use client'
 
+import { memo, useMemo } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 
 export interface Activity {
@@ -58,7 +59,7 @@ function getActivityColor(type: Activity['type']): string {
   }
 }
 
-function ActivityItem({ activity }: { activity: Activity }) {
+const ActivityItem = memo(function ActivityItem({ activity }: { activity: Activity }) {
   const icon = getActivityIcon(activity.type)
   const colorClass = getActivityColor(activity.type)
 
@@ -108,10 +109,17 @@ function ActivityItem({ activity }: { activity: Activity }) {
       </div>
     </div>
   )
-}
+})
 
-export function ActivityTimeline({ activities, title = '📅 Recent Activity', maxItems = 10 }: ActivityTimelineProps) {
-  const displayedActivities = activities.slice(0, maxItems)
+export const ActivityTimeline = memo(function ActivityTimeline({ activities, title = '\ud83d\udcc5 Recent Activity', maxItems = 10 }: ActivityTimelineProps) {
+  const displayedActivities = useMemo(() => activities.slice(0, maxItems), [activities, maxItems])
+
+  // Memoize stats to avoid repeated filter operations
+  const stats = useMemo(() => ({
+    sessions: activities.filter(a => a.type === 'session_completed').length,
+    achievements: activities.filter(a => a.type === 'achievement_unlocked').length,
+    mastered: activities.filter(a => a.type === 'concept_mastered').length,
+  }), [activities])
 
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
@@ -122,7 +130,7 @@ export function ActivityTimeline({ activities, title = '📅 Recent Activity', m
             onClick={() => window.location.href = '/activity'}
             className="text-sm text-blue-600 hover:text-blue-700 font-medium"
           >
-            View All →
+            View All \u2192
           </button>
         )}
       </div>
@@ -130,7 +138,7 @@ export function ActivityTimeline({ activities, title = '📅 Recent Activity', m
       {displayedActivities.length === 0 ? (
         <div className="flex items-center justify-center py-12 text-gray-400">
           <div className="text-center">
-            <p className="text-lg mb-2">📅</p>
+            <p className="text-lg mb-2">\ud83d\udcc5</p>
             <p>No recent activity</p>
             <p className="text-sm">Start learning to see your progress here!</p>
           </div>
@@ -149,19 +157,19 @@ export function ActivityTimeline({ activities, title = '📅 Recent Activity', m
           <div className="grid grid-cols-3 gap-4 text-center">
             <div>
               <div className="text-2xl font-bold text-gray-900">
-                {activities.filter(a => a.type === 'session_completed').length}
+                {stats.sessions}
               </div>
               <div className="text-xs text-gray-500">Sessions</div>
             </div>
             <div>
               <div className="text-2xl font-bold text-purple-600">
-                {activities.filter(a => a.type === 'achievement_unlocked').length}
+                {stats.achievements}
               </div>
               <div className="text-xs text-gray-500">Achievements</div>
             </div>
             <div>
               <div className="text-2xl font-bold text-green-600">
-                {activities.filter(a => a.type === 'concept_mastered').length}
+                {stats.mastered}
               </div>
               <div className="text-xs text-gray-500">Mastered</div>
             </div>
@@ -170,4 +178,4 @@ export function ActivityTimeline({ activities, title = '📅 Recent Activity', m
       )}
     </div>
   )
-}
+})

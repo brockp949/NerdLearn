@@ -15,7 +15,7 @@
  * 4. Generate actionable recommendations
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, memo, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   RadarChart,
@@ -170,12 +170,12 @@ const generateMockData = (): LearningDNAData => ({
 });
 
 // Sub-components
-const TraitRadar: React.FC<{ traits: LearningTrait[] }> = ({ traits }) => {
-  const data = traits.map((t) => ({
+const TraitRadar = memo<{ traits: LearningTrait[] }>(function TraitRadar({ traits }) {
+  const data = useMemo(() => traits.map((t) => ({
     trait: t.name,
     value: t.value,
     fullMark: 100,
-  }));
+  })), [traits]);
 
   return (
     <div className="bg-gray-900/50 backdrop-blur-sm rounded-xl p-6 border border-cyan-500/20">
@@ -203,9 +203,9 @@ const TraitRadar: React.FC<{ traits: LearningTrait[] }> = ({ traits }) => {
       </ResponsiveContainer>
     </div>
   );
-};
+});
 
-const TraitDetails: React.FC<{ traits: LearningTrait[] }> = ({ traits }) => {
+const TraitDetails = memo<{ traits: LearningTrait[] }>(function TraitDetails({ traits }) {
   const [selectedTrait, setSelectedTrait] = useState<LearningTrait | null>(null);
 
   const getTraitColor = (value: number) => {
@@ -259,9 +259,9 @@ const TraitDetails: React.FC<{ traits: LearningTrait[] }> = ({ traits }) => {
       </div>
     </div>
   );
-};
+});
 
-const ModalityChart: React.FC<{ preferences: ModalityPreference[] }> = ({ preferences }) => {
+const ModalityChart = memo<{ preferences: ModalityPreference[] }>(function ModalityChart({ preferences }) {
   return (
     <div className="bg-gray-900/50 backdrop-blur-sm rounded-xl p-6 border border-emerald-500/20">
       <h3 className="text-lg font-semibold text-emerald-400 mb-4">Modality Preferences</h3>
@@ -293,9 +293,9 @@ const ModalityChart: React.FC<{ preferences: ModalityPreference[] }> = ({ prefer
       </div>
     </div>
   );
-};
+});
 
-const BehaviorPatterns: React.FC<{ patterns: BehaviorPattern[] }> = ({ patterns }) => {
+const BehaviorPatterns = memo<{ patterns: BehaviorPattern[] }>(function BehaviorPatterns({ patterns }) {
   const getImpactColor = (impact: string) => {
     switch (impact) {
       case 'positive':
@@ -338,9 +338,9 @@ const BehaviorPatterns: React.FC<{ patterns: BehaviorPattern[] }> = ({ patterns 
       </div>
     </div>
   );
-};
+});
 
-const SessionTrends: React.FC<{ sessions: LearningSession[] }> = ({ sessions }) => {
+const SessionTrends = memo<{ sessions: LearningSession[] }>(function SessionTrends({ sessions }) {
   return (
     <div className="bg-gray-900/50 backdrop-blur-sm rounded-xl p-6 border border-pink-500/20">
       <h3 className="text-lg font-semibold text-pink-400 mb-4">Session Trends</h3>
@@ -393,9 +393,9 @@ const SessionTrends: React.FC<{ sessions: LearningSession[] }> = ({ sessions }) 
       </div>
     </div>
   );
-};
+});
 
-const RecommendationCard: React.FC<{ recommendations: string[] }> = ({ recommendations }) => {
+const RecommendationCard = memo<{ recommendations: string[] }>(function RecommendationCard({ recommendations }) {
   return (
     <div className="bg-gradient-to-br from-cyan-900/30 to-purple-900/30 backdrop-blur-sm rounded-xl p-6 border border-cyan-500/30">
       <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
@@ -420,9 +420,9 @@ const RecommendationCard: React.FC<{ recommendations: string[] }> = ({ recommend
       </ul>
     </div>
   );
-};
+});
 
-const OverallScore: React.FC<{ score: number; style: string }> = ({ score, style }) => {
+const OverallScore = memo<{ score: number; style: string }>(function OverallScore({ score, style }) {
   const circumference = 2 * Math.PI * 45;
   const progress = ((100 - score) / 100) * circumference;
 
@@ -476,13 +476,13 @@ const OverallScore: React.FC<{ score: number; style: string }> = ({ score, style
       </div>
     </div>
   );
-};
+});
 
 // Main Component
-export const LearningDNADashboard: React.FC<LearningDNADashboardProps> = ({
+export const LearningDNADashboard = memo<LearningDNADashboardProps>(function LearningDNADashboard({
   userId,
   courseId,
-}) => {
+}) {
   const [data, setData] = useState<LearningDNAData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -606,6 +606,6 @@ export const LearningDNADashboard: React.FC<LearningDNADashboardProps> = ({
       </motion.div>
     </div>
   );
-};
+});
 
 export default LearningDNADashboard;

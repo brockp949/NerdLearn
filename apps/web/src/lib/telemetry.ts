@@ -54,6 +54,8 @@ export class TelemetryClient {
     private reconnectAttempts: number = 0
     private maxReconnectAttempts: number = 5
     private reconnectDelay: number = 2000
+    private connectionErrorLogged: boolean = false
+    private readonly MAX_BUFFER_SIZE = 100 // Prevent memory issues
 
     // Idle Detection
     private lastActivity: number = Date.now()
@@ -97,6 +99,7 @@ export class TelemetryClient {
                 console.log('✅ Telemetry connected')
                 this.connected = true
                 this.reconnectAttempts = 0
+                this.connectionErrorLogged = false
 
                 // Send initial handshake
                 this.send({
@@ -120,19 +123,21 @@ export class TelemetryClient {
                 }
             }
 
-            this.ws.onerror = (error) => {
-                console.error('Telemetry WebSocket error:', error)
+            this.ws.onerror = () => {
+                if (!this.connectionErrorLogged) {
+                    console.warn('Telemetry service unavailable (this is normal if backend is not running)')
+                    this.connectionErrorLogged = true
+                }
             }
 
             this.ws.onclose = () => {
-                console.log('🔌 Telemetry disconnected')
                 this.connected = false
 
                 if (this.onConnectionChange) {
                     this.onConnectionChange(false)
                 }
 
-                // Attempt reconnection
+                // Attempt reconnection silently
                 this.attemptReconnect()
             }
 
@@ -147,14 +152,15 @@ export class TelemetryClient {
      */
     private attemptReconnect() {
         if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-            console.warn('Max reconnection attempts reached. Telemetry disabled.')
+            // Only log once when max attempts reached
+            if (this.reconnectAttempts === this.maxReconnectAttempts) {
+                console.info('Telemetry: max reconnection attempts reached, running in offline mode')
+            }
             return
         }
 
         this.reconnectAttempts++
         const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1)
-
-        console.log(`Reconnecting to telemetry in ${delay}ms (attempt ${this.reconnectAttempts})...`)
 
         setTimeout(() => {
             this.connect()
@@ -229,6 +235,14 @@ export class TelemetryClient {
         }
 
         this.mouseBuffer.push(mouseEvent)
+
+        // Flush if buffer exceeds size limit (prevents memory issues)
+        if (this.mouseBuffer.length >= this.MAX_BUFFER_SIZE) {
+            this.flushMouseBuffer()
+            this.lastSent = Date.now()
+            this.resetIdle()
+            return
+        }
 
         // Throttle sending
         const now = Date.now()

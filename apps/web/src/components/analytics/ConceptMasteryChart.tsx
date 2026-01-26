@@ -1,5 +1,6 @@
 'use client'
 
+import { memo, useMemo } from 'react'
 import { RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Tooltip, Legend } from 'recharts'
 
 export interface ConceptMastery {
@@ -15,25 +16,30 @@ export interface ConceptMasteryChartProps {
   height?: number
 }
 
-export function ConceptMasteryChart({ concepts, title = '📚 Concept Mastery', height = 400 }: ConceptMasteryChartProps) {
-  // Format data for radar chart (convert to 0-100 scale)
-  const chartData = concepts.map(concept => ({
-    concept: concept.conceptName,
-    mastery: Math.round(concept.mastery * 100),
-    fullName: concept.conceptName,
-    reviewed: concept.cardsReviewed,
-    total: concept.totalCards
-  }))
+export const ConceptMasteryChart = memo(function ConceptMasteryChart({ concepts, title = '\ud83d\udcda Concept Mastery', height = 400 }: ConceptMasteryChartProps) {
+  // Memoize all computed data to avoid recalculation on re-renders
+  const { chartData, avgMastery, strengths, weaknesses } = useMemo(() => {
+    // Format data for radar chart (convert to 0-100 scale)
+    const chartData = concepts.map(concept => ({
+      concept: concept.conceptName,
+      mastery: Math.round(concept.mastery * 100),
+      fullName: concept.conceptName,
+      reviewed: concept.cardsReviewed,
+      total: concept.totalCards
+    }))
 
-  // Calculate average mastery
-  const avgMastery = concepts.length > 0
-    ? Math.round((concepts.reduce((sum, c) => sum + c.mastery, 0) / concepts.length) * 100)
-    : 0
+    // Calculate average mastery
+    const avgMastery = concepts.length > 0
+      ? Math.round((concepts.reduce((sum, c) => sum + c.mastery, 0) / concepts.length) * 100)
+      : 0
 
-  // Sort by mastery to show strengths and weaknesses
-  const sortedConcepts = [...concepts].sort((a, b) => b.mastery - a.mastery)
-  const strengths = sortedConcepts.slice(0, 3)
-  const weaknesses = sortedConcepts.slice(-3).reverse()
+    // Sort by mastery to show strengths and weaknesses
+    const sortedConcepts = [...concepts].sort((a, b) => b.mastery - a.mastery)
+    const strengths = sortedConcepts.slice(0, 3)
+    const weaknesses = sortedConcepts.slice(-3).reverse()
+
+    return { chartData, avgMastery, strengths, weaknesses }
+  }, [concepts])
 
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
@@ -159,4 +165,4 @@ export function ConceptMasteryChart({ concepts, title = '📚 Concept Mastery', 
       )}
     </div>
   )
-}
+})
