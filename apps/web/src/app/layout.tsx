@@ -4,8 +4,8 @@ import "./globals.css";
 import { Navbar } from "@/components/layout/Navbar";
 import { InterventionToast } from "@/components/ui/intervention-toast";
 import { cn } from "@/lib/utils";
-import { AuthProvider } from "@/lib/auth-context";
 import { TelemetryProvider } from "@/components/providers/telemetry-provider";
+import { Providers } from "./providers";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const outfit = Outfit({ subsets: ["latin"], variable: "--font-outfit" });
@@ -23,7 +23,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
       <body className={cn(inter.variable, outfit.variable, "font-sans min-h-screen bg-background text-foreground antialiased")} suppressHydrationWarning>
-        <AuthProvider>
+        <Providers>
           <TelemetryProvider>
             <div className="relative flex min-h-screen flex-col">
               <Navbar />
@@ -33,7 +33,7 @@ export default function RootLayout({
               <InterventionToast />
             </div>
           </TelemetryProvider>
-        </AuthProvider>
+        </Providers>
       </body>
     </html>
   );

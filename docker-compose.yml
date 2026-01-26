@@ -69,7 +69,7 @@ services:
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
     ports:
-      - "8000:8000"
+      - "8010:8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -120,11 +120,11 @@ services:
       dockerfile: Dockerfile
     container_name: nerdlearn-web
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000
-      NEXT_PUBLIC_TELEMETRY_URL: ws://localhost:8002
+      NEXT_PUBLIC_API_URL: http://localhost:8010
+      NEXT_PUBLIC_TELEMETRY_URL: ws://localhost:8012
       API_URL: http://api:8000 # For server-side rewrites
     ports:
-      - "3001:3000"
+      - "3011:3000"
     depends_on:
       - api
     volumes:
@@ -142,7 +142,7 @@ services:
     environment:
       REDIS_URL: redis://redis:6379/1
     ports:
-      - "8002:8002"
+      - "8012:8002"
     depends_on:
       redis:
         condition: service_healthy
@@ -164,7 +164,7 @@ services:
       CONTENT_URL: http://content:8000
       REDIS_URL: redis://redis:6379/0
     ports:
-      - "8005:8000"
+      - "8015:8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -184,7 +184,7 @@ services:
       DATABASE_URL: postgresql://nerdlearn:password@postgres:5432/nerdlearn
       REDIS_URL: redis://redis:6379/0
     ports:
-      - "8001:8000"
+      - "8011:8000"
     volumes:
       - ./services/scheduler:/app
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
@@ -198,7 +198,7 @@ services:
     environment:
       DATABASE_URL: postgresql://nerdlearn:password@postgres:5432/nerdlearn
     ports:
-      - "8003:8000"
+      - "8013:8000"
     volumes:
       - ./services/inference:/app
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
@@ -215,7 +215,7 @@ services:
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
     ports:
-      - "8004:8000"
+      - "8014:8000"
     volumes:
       - ./services/content-ingestion:/app
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload

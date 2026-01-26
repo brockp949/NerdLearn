@@ -69,7 +69,9 @@
       "Bash(powershell -Command \"cd ''c:\\\\Users\\\\brock\\\\Documents\\\\NerdLearn\\\\NerdLearn\\\\apps\\\\api''; python -c ''from app.adaptive.neural_ode.hybrid_scheduler import HybridFSRSScheduler, HybridConfig, ODEState, ControlMode; print\\(\"\"Imports OK\"\"\\)'' 2>&1\")",
       "Bash(tree:*)",
       "Bash(ls:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(timeout:*)",
+      "Bash(npm install:*)"
     ],
     "deny": [],
     "ask": []
