@@ -1,0 +1,539 @@
+name: Database Tests & Reports
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'apps/api/app/models/**'
+      - 'packages/db/**'
+      - 'tests/database/**'
+      - '.github/workflows/database-tests.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'apps/api/app/models/**'
+      - 'packages/db/**'
+      - 'tests/database/**'
+  schedule:
+    # Run daily at 2 AM UTC for regression detection
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      run_benchmarks:
+        description: 'Run performance benchmarks'
+        required: false
+        default: 'true'
+        type: boolean
+      run_stress_tests:
+        description: 'Run stress/load tests'
+        required: false
+        default: 'false'
+        type: boolean
+
+env:
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '20'
+
+jobs:
+  schema-integrity:
+    name: Schema Integrity Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: nerdlearn_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r apps/api/requirements.txt
+          pip install -r apps/api/requirements-test.txt
+          pip install pytest-html pytest-json-report
+
+      - name: Run schema integrity tests
+        env:
+          TEST_DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/nerdlearn_test
+          TEST_SYNC_DATABASE_URL: postgresql://test:test@localhost:5432/nerdlearn_test
+        run: |
+          pytest tests/database/test_schema_integrity.py \
+            -v \
+            --tb=short \
+            --json-report \
+            --json-report-file=reports/schema_tests.json \
+            --html=reports/schema_tests.html \
+            --self-contained-html
+
+      - name: Upload schema test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: schema-test-reports
+          path: reports/
+          retention-days: 30
+
+  data-integrity:
+    name: Data Integrity Tests
+    runs-on: ubuntu-latest
+    needs: schema-integrity
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: nerdlearn_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r apps/api/requirements.txt
+          pip install -r apps/api/requirements-test.txt
+          pip install pytest-html pytest-json-report
+
+      - name: Run data integrity tests
+        env:
+          TEST_DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/nerdlearn_test
+          TEST_SYNC_DATABASE_URL: postgresql://test:test@localhost:5432/nerdlearn_test
+        run: |
+          pytest tests/database/test_data_integrity.py \
+            -v \
+            --tb=short \
+            --json-report \
+            --json-report-file=reports/data_integrity_tests.json \
+            --html=reports/data_integrity_tests.html \
+            --self-contained-html
+
+      - name: Upload data integrity reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: data-integrity-reports
+          path: reports/
+          retention-days: 30
+
+  crud-operations:
+    name: CRUD Operations Tests
+    runs-on: ubuntu-latest
+    needs: schema-integrity
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: nerdlearn_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r apps/api/requirements.txt
+          pip install -r apps/api/requirements-test.txt
+          pip install pytest-html pytest-json-report
+
+      - name: Run CRUD tests
+        env:
+          TEST_DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/nerdlearn_test
+        run: |
+          pytest tests/database/test_crud_operations.py \
+            -v \
+            --tb=short \
+            --json-report \
+            --json-report-file=reports/crud_tests.json \
+            --html=reports/crud_tests.html \
+            --self-contained-html
+
+      - name: Upload CRUD test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: crud-test-reports
+          path: reports/
+          retention-days: 30
+
+  relationships:
+    name: Relationship & Cascade Tests
+    runs-on: ubuntu-latest
+    needs: [data-integrity, crud-operations]
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: nerdlearn_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r apps/api/requirements.txt
+          pip install -r apps/api/requirements-test.txt
+          pip install pytest-html pytest-json-report
+
+      - name: Run relationship tests
+        env:
+          TEST_DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/nerdlearn_test
+        run: |
+          pytest tests/database/test_relationships.py \
+            -v \
+            --tb=short \
+            --json-report \
+            --json-report-file=reports/relationship_tests.json \
+            --html=reports/relationship_tests.html \
+            --self-contained-html
+
+      - name: Upload relationship test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: relationship-test-reports
+          path: reports/
+          retention-days: 30
+
+  performance-benchmarks:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+    needs: relationships
+    if: ${{ github.event_name == 'schedule' || github.event.inputs.run_benchmarks == 'true' || github.event_name == 'push' }}
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: nerdlearn_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r apps/api/requirements.txt
+          pip install -r apps/api/requirements-test.txt
+          pip install pytest-html pytest-json-report pytest-benchmark
+
+      - name: Run performance benchmarks
+        env:
+          TEST_DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/nerdlearn_test
+        run: |
+          pytest tests/database/test_performance.py \
+            -v \
+            --tb=short \
+            --json-report \
+            --json-report-file=reports/performance_tests.json \
+            --html=reports/performance_tests.html \
+            --self-contained-html \
+            -m "benchmark or slow"
+
+      - name: Upload performance reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: performance-reports
+          path: reports/
+          retention-days: 90
+
+      - name: Comment benchmark results on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = JSON.parse(fs.readFileSync('reports/performance_tests.json', 'utf8'));
+
+            let comment = '## Performance Benchmark Results\n\n';
+            comment += '| Test | Duration | Status |\n';
+            comment += '|------|----------|--------|\n';
+
+            for (const test of report.tests || []) {
+              const status = test.outcome === 'passed' ? '✅' : '❌';
+              comment += `| ${test.nodeid.split('::').pop()} | ${test.call?.duration?.toFixed(4) || 'N/A'}s | ${status} |\n`;
+            }
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+  concurrency-tests:
+    name: Concurrency Tests
+    runs-on: ubuntu-latest
+    needs: relationships
+    if: ${{ github.event_name == 'schedule' || github.event.inputs.run_stress_tests == 'true' }}
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: nerdlearn_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r apps/api/requirements.txt
+          pip install -r apps/api/requirements-test.txt
+          pip install pytest-html pytest-json-report
+
+      - name: Run concurrency tests
+        env:
+          TEST_DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/nerdlearn_test
+        run: |
+          pytest tests/database/test_concurrency.py \
+            -v \
+            --tb=short \
+            --json-report \
+            --json-report-file=reports/concurrency_tests.json \
+            --html=reports/concurrency_tests.html \
+            --self-contained-html
+
+      - name: Upload concurrency test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: concurrency-reports
+          path: reports/
+          retention-days: 30
+
+  generate-summary-report:
+    name: Generate Summary Report
+    runs-on: ubuntu-latest
+    needs: [schema-integrity, data-integrity, crud-operations, relationships]
+    if: always()
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all reports
+        uses: actions/download-artifact@v4
+        with:
+          path: all-reports/
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Generate combined report
+        run: |
+          python << 'EOF'
+          import json
+          import os
+          from datetime import datetime
+          from pathlib import Path
+
+          # Collect all JSON reports
+          all_tests = []
+          for report_dir in Path('all-reports').iterdir():
+              for json_file in report_dir.glob('*.json'):
+                  try:
+                      with open(json_file) as f:
+                          data = json.load(f)
+                          all_tests.extend(data.get('tests', []))
+                  except Exception as e:
+                      print(f"Error reading {json_file}: {e}")
+
+          # Calculate summary
+          total = len(all_tests)
+          passed = sum(1 for t in all_tests if t.get('outcome') == 'passed')
+          failed = sum(1 for t in all_tests if t.get('outcome') == 'failed')
+          skipped = sum(1 for t in all_tests if t.get('outcome') == 'skipped')
+
+          summary = {
+              'timestamp': datetime.utcnow().isoformat(),
+              'total_tests': total,
+              'passed': passed,
+              'failed': failed,
+              'skipped': skipped,
+              'pass_rate': (passed / total * 100) if total > 0 else 0,
+              'tests': all_tests
+          }
+
+          os.makedirs('reports', exist_ok=True)
+          with open('reports/combined_summary.json', 'w') as f:
+              json.dump(summary, f, indent=2)
+
+          # Print summary
+          print(f"\n{'='*60}")
+          print("DATABASE TEST SUMMARY")
+          print(f"{'='*60}")
+          print(f"Total:     {total}")
+          print(f"Passed:    {passed}")
+          print(f"Failed:    {failed}")
+          print(f"Skipped:   {skipped}")
+          print(f"Pass Rate: {summary['pass_rate']:.1f}%")
+          print(f"{'='*60}")
+          EOF
+
+      - name: Upload combined report
+        uses: actions/upload-artifact@v4
+        with:
+          name: combined-database-report
+          path: reports/combined_summary.json
+          retention-days: 90
+
+      - name: Set job summary
+        run: |
+          python << 'EOF'
+          import json
+
+          with open('reports/combined_summary.json') as f:
+              summary = json.load(f)
+
+          md = f"""
+          ## Database Test Results
+
+          | Metric | Value |
+          |--------|-------|
+          | Total Tests | {summary['total_tests']} |
+          | Passed | {summary['passed']} |
+          | Failed | {summary['failed']} |
+          | Skipped | {summary['skipped']} |
+          | Pass Rate | {summary['pass_rate']:.1f}% |
+
+          ### Status: {'✅ All tests passed!' if summary['failed'] == 0 else '❌ Some tests failed'}
+          """
+
+          with open('$GITHUB_STEP_SUMMARY', 'a') as f:
+              f.write(md)
+          EOF
+
+  notify-on-failure:
+    name: Notify on Failure
+    runs-on: ubuntu-latest
+    needs: [schema-integrity, data-integrity, crud-operations, relationships]
+    if: failure() && github.event_name == 'schedule'
+
+    steps:
+      - name: Create issue on failure
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = `Database Tests Failed - ${new Date().toISOString().split('T')[0]}`;
+            const body = `
+            ## Scheduled Database Tests Failed
+
+            The nightly database test run has failed.
+
+            **Workflow run:** ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}
+
+            Please investigate the failing tests and fix any issues.
+
+            ### Categories to check:
+            - Schema Integrity
+            - Data Integrity
+            - CRUD Operations
+            - Relationships & Cascades
+
+            cc: @database-team
+            `;
+
+            // Check for existing open issue
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'database-tests,automated',
+              state: 'open'
+            });
+
+            if (issues.data.length === 0) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: title,
+                body: body,
+                labels: ['database-tests', 'automated', 'bug']
+              });
+            }
