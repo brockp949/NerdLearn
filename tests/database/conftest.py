@@ -8,15 +8,23 @@ Provides shared fixtures for database testing including:
 - Database session management
 """
 import os
+import sys
 import pytest
 import asyncio
 from datetime import datetime, timedelta
 from typing import AsyncGenerator, Generator
 from unittest.mock import MagicMock, AsyncMock, patch
+from pathlib import Path
+
+# Add apps/api to Python path for imports
+_project_root = Path(__file__).parent.parent.parent
+_api_path = _project_root / "apps" / "api"
+if str(_api_path) not in sys.path:
+    sys.path.insert(0, str(_api_path))
 
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import sessionmaker, Session, declarative_base
 from sqlalchemy.pool import StaticPool
 
 
@@ -29,6 +37,39 @@ TEST_SYNC_DATABASE_URL = os.getenv(
     "TEST_SYNC_DATABASE_URL",
     "sqlite:///:memory:"
 )
+
+# Create a local Base for tests that don't need the full app
+TestBase = declarative_base()
+
+
+def _get_app_base_and_models():
+    """
+    Attempt to import the app's Base and models.
+    Returns (Base, models_imported) tuple.
+    Falls back to TestBase if import fails.
+    """
+    try:
+        # Mock the settings before importing to avoid config issues
+        os.environ.setdefault("DATABASE_URL", TEST_SYNC_DATABASE_URL)
+        from app.core.database import Base
+
+        # Import models that work with SQLite
+        # Skip vector_store which requires pgvector (PostgreSQL only)
+        from app.models.user import User, Instructor
+        from app.models.course import Course, Module, Enrollment
+        from app.models.assessment import UserConceptMastery
+        from app.models.spaced_repetition import SpacedRepetitionCard, ReviewLog, Concept
+        from app.models.social import (
+            Friendship, Challenge, ChallengeParticipant,
+            StudyGroup, GroupMessage, Leaderboard, UserActivity,
+        )
+        from app.models.gamification import UserAchievement, UserStats, DailyActivity, ChatHistory
+
+        return Base, True
+    except ImportError as e:
+        print(f"Warning: Could not import app models: {e}")
+        print("Using TestBase - some tests may be skipped")
+        return TestBase, False
 
 
 @pytest.fixture(scope="session")
@@ -49,7 +90,17 @@ def sync_engine():
         poolclass=StaticPool,
         echo=False
     )
-    return engine
+
+    # Create all tables from app models
+    Base, models_imported = _get_app_base_and_models()
+    if models_imported:
+        Base.metadata.create_all(bind=engine)
+
+    yield engine
+
+    # Cleanup
+    if models_imported:
+        Base.metadata.drop_all(bind=engine)
 
 
 @pytest.fixture(scope="session")
@@ -68,8 +119,10 @@ async def async_engine():
 async def async_session(async_engine) -> AsyncGenerator[AsyncSession, None]:
     """Provide async database session for tests."""
     # Import models to ensure they are registered
-    from app.core.database import Base
-    import app.models  # noqa: F401
+    Base, models_imported = _get_app_base_and_models()
+
+    if not models_imported:
+        pytest.skip("App models not available for async session tests")
 
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -91,11 +144,12 @@ async def async_session(async_engine) -> AsyncGenerator[AsyncSession, None]:
 @pytest.fixture
 def sync_session(sync_engine) -> Generator[Session, None, None]:
     """Provide sync database session for tests."""
-    from app.core.database import Base
-    import app.models  # noqa: F401
+    Base, models_imported = _get_app_base_and_models()
 
-    Base.metadata.create_all(bind=sync_engine)
+    if not models_imported:
+        pytest.skip("App models not available for sync session tests")
 
+    # Tables are already created by sync_engine fixture
     SessionLocal = sessionmaker(bind=sync_engine, autoflush=False, autocommit=False)
     session = SessionLocal()
 
@@ -104,7 +158,6 @@ def sync_session(sync_engine) -> Generator[Session, None, None]:
         session.rollback()
     finally:
         session.close()
-        Base.metadata.drop_all(bind=sync_engine)
 
 
 # ============================================================================

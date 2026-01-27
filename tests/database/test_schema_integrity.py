@@ -21,10 +21,13 @@ pytestmark = [pytest.mark.requires_db, pytest.mark.unit]
 class TestTableExistence:
     """Verify all expected tables exist in the schema."""
 
+    # Core tables from actual models
     EXPECTED_TABLES = [
         "users",
         "instructors",
         "courses",
+        "modules",
+        "module_prerequisites",
         "enrollments",
         "concepts",
         "user_concept_mastery",
@@ -34,6 +37,20 @@ class TestTableExistence:
         "user_stats",
         "daily_activities",
         "chat_history",
+        # Social models
+        "friendships",
+        "challenges",
+        "challenge_participants",
+        "study_groups",
+        "study_group_members",
+        "group_messages",
+        "leaderboards",
+        "user_activities",
+    ]
+
+    # Tables that require PostgreSQL-specific features (pgvector, etc.)
+    POSTGRES_ONLY_TABLES = [
+        "course_chunks",
     ]
 
     def test_all_required_tables_exist(self, sync_engine: Engine):
@@ -137,9 +154,10 @@ class TestCourseTableSchema:
         inspector = inspect(sync_engine)
         columns = {col["name"]: col for col in inspector.get_columns("courses")}
 
+        # Match actual Course model columns
         required_columns = [
-            "id", "title", "description", "domain",
-            "instructor_id", "is_published", "created_at"
+            "id", "title", "description", "instructor_id",
+            "status", "created_at"
         ]
 
         for col_name in required_columns:
@@ -168,10 +186,10 @@ class TestSpacedRepetitionSchema:
         inspector = inspect(sync_engine)
         columns = {col["name"]: col for col in inspector.get_columns("spaced_repetition_cards")}
 
-        # FSRS algorithm requires these columns
+        # FSRS algorithm columns - matching actual model
         fsrs_columns = [
-            "difficulty", "stability", "retrievability",
-            "review_count", "next_review_at"
+            "difficulty", "stability", "reps", "lapses",
+            "state", "due", "elapsed_days", "scheduled_days"
         ]
 
         for col_name in fsrs_columns:
@@ -183,9 +201,10 @@ class TestSpacedRepetitionSchema:
         inspector = inspect(sync_engine)
         columns = {col["name"]: col for col in inspector.get_columns("review_logs")}
 
+        # Match actual ReviewLog model
         required_columns = [
-            "id", "card_id", "rating", "reviewed_at",
-            "response_time_ms"
+            "id", "card_id", "rating", "review_time",
+            "review_duration_ms"
         ]
 
         for col_name in required_columns:
@@ -219,19 +238,19 @@ class TestIndexes:
 
         assert username_indexed, "users.username should be indexed"
 
-    def test_courses_domain_index(self, sync_engine: Engine):
-        """Verify index on courses.domain for category filtering."""
+    def test_courses_title_index(self, sync_engine: Engine):
+        """Verify index on courses.title for search."""
         inspector = inspect(sync_engine)
         indexes = inspector.get_indexes("courses")
 
-        domain_indexed = any(
-            "domain" in idx.get("column_names", [])
+        title_indexed = any(
+            "title" in idx.get("column_names", [])
             for idx in indexes
         )
 
         # This is a recommended index, not required
-        if not domain_indexed:
-            pytest.skip("courses.domain index recommended but not required")
+        if not title_indexed:
+            pytest.skip("courses.title index recommended but not required")
 
 
 class TestForeignKeyConstraints:

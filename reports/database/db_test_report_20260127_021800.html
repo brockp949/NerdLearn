@@ -1,0 +1,534 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Database Test Report - 20260127_021800</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { padding: 20px; }
+        .summary-card { margin-bottom: 20px; }
+        .pass-rate { font-size: 2rem; font-weight: bold; }
+        .table { margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <h1>Database Test Report</h1>
+        <p class="text-muted">Run ID: 20260127_021800 | Generated: 2026-01-27T02:18:06.976756</p>
+
+        <!-- Summary Cards -->
+        <div class="row summary-card">
+            <div class="col-md-3">
+                <div class="card text-white bg-primary">
+                    <div class="card-body">
+                        <h5 class="card-title">Total Tests</h5>
+                        <p class="pass-rate">20</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-white bg-success">
+                    <div class="card-body">
+                        <h5 class="card-title">Passed</h5>
+                        <p class="pass-rate">1</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-white bg-danger">
+                    <div class="card-body">
+                        <h5 class="card-title">Failed</h5>
+                        <p class="pass-rate">17</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-white bg-warning">
+                    <div class="card-body">
+                        <h5 class="card-title">Pass Rate</h5>
+                        <p class="pass-rate">5.0%</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Category Summary -->
+        <h2>Results by Category</h2>
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>Category</th>
+                    <th>Total</th>
+                    <th>Passed</th>
+                    <th>Failed</th>
+                    <th>Skipped</th>
+                    <th>Pass Rate</th>
+                </tr>
+            </thead>
+            <tbody>
+                
+            <tr>
+                <td>schema_integrity</td>
+                <td>20</td>
+                <td>1</td>
+                <td>17</td>
+                <td>2</td>
+                <td>5.0%</td>
+            </tr>
+            
+            </tbody>
+        </table>
+
+        <!-- Test Details -->
+        <h2>Test Details</h2>
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>Test Name</th>
+                    <th>Category</th>
+                    <th>Status</th>
+                    <th>Duration</th>
+                    <th>Message</th>
+                </tr>
+            </thead>
+            <tbody>
+                
+            <tr>
+                <td>test_all_required_tables_exist</td>
+                <td>schema_integrity</td>
+                <td><span class="badge bg-danger">failed</span></td>
+                <td>0.0065s</td>
+                <td>tests\database\test_schema_integrity.py:45: in test_all_required_tables_exist
+    assert table in existing_tables, f"Missing required table: {table}"
+E   AssertionError: Missing required table: users
+E   assert 'users' in []</td>
+            </tr>
+            
+            <tr>
+                <td>test_no_orphan_tables</td>
+                <td>schema_integrity</td>
+                <td><span class="badge bg-success">passed</span></td>
+                <td>0.0005s</td>
+                <td>-</td>
+            </tr>
+            
+            <tr>
+                <td>test_user_table_columns</td>
+                <td>schema_integrity</td>
+                <td><span class="badge bg-danger">failed</span></td>
+                <td>0.0008s</td>
+                <td>tests\database\test_schema_integrity.py:68: in test_user_table_columns
+    columns = {col["name"]: col for col in inspector.get_columns("users")}
+                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\engine\reflection.py:869: in get_columns
+    col_defs = self.dialect.get_columns(
+<string>:2: in get_columns
+    ???
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\engine\reflection.py:106: in cache
+    ret = fn(self, con, *args, **kw)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\dialects\sqlite\base.py:2435: in get_columns
+    raise exc.NoSuchTableError(
+E   sqlalchemy.exc.NoSuchTableError: users</td>
+            </tr>
+            
+            <tr>
+                <td>test_user_email_is_unique</td>
+                <td>schema_integrity</td>
+                <td><span class="badge bg-danger">failed</span></td>
+                <td>0.0006s</td>
+                <td>tests\database\test_schema_integrity.py:83: in test_user_email_is_unique
+    unique_constraints = inspector.get_unique_constraints("users")
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\engine\reflection.py:1233: in get_unique_constraints
+    return self.dialect.get_unique_constraints(
+<string>:2: in get_unique_constraints
+    ???
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\engine\reflection.py:106: in cache
+    ret = fn(self, con, *args, **kw)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\dialects\sqlite\base.py:2744: in get_unique_constraints
+    for idx in self.get_indexes(
+<string>:2: in get_indexes
+    ???
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\engine\reflection.py:106: in cache
+    ret = fn(self, con, *args, **kw)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\dialects\sqlite\base.py:2977: in get_indexes
+    raise exc.NoSuchTableError(
+E   sqlalchemy.exc.NoSuchTableError: users</td>
+            </tr>
+            
+            <tr>
+                <td>test_user_username_is_unique</td>
+                <td>schema_integrity</td>
+                <td><span class="badge bg-danger">failed</span></td>
+                <td>0.0006s</td>
+                <td>tests\database\test_schema_integrity.py:100: in test_user_username_is_unique
+    unique_constraints = inspector.get_unique_constraints("users")
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\engine\reflection.py:1233: in get_unique_constraints
+    return self.dialect.get_unique_constraints(
+<string>:2: in get_unique_constraints
+    ???
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\engine\reflection.py:106: in cache
+    ret = fn(self, con, *args, **kw)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\dialects\sqlite\base.py:2744: in get_unique_constraints
+    for idx in self.get_indexes(
+<string>:2: in get_indexes
+    ???
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\engine\reflection.py:106: in cache
+    ret = fn(self, con, *args, **kw)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\dialects\sqlite\base.py:2977: in get_indexes
+    raise exc.NoSuchTableError(
+E   sqlalchemy.exc.NoSuchTableError: users</td>
+            </tr>
+            
+            <tr>
+                <td>test_user_email_not_nullable</td>
+                <td>schema_integrity</td>
+                <td><span class="badge bg-danger">failed</span></td>
+                <td>0.0006s</td>
+                <td>tests\database\test_schema_integrity.py:116: in test_user_email_not_nullable
+    columns = {col["name"]: col for col in inspector.get_columns("users")}
+                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\engine\reflection.py:869: in get_columns
+    col_defs = self.dialect.get_columns(
+<string>:2: in get_columns
+    ???
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\engine\reflection.py:106: in cache
+    ret = fn(self, con, *args, **kw)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\dialects\sqlite\base.py:2435: in get_columns
+    raise exc.NoSuchTableError(
+E   sqlalchemy.exc.NoSuchTableError: users</td>
+            </tr>
+            
+            <tr>
+                <td>test_user_default_values</td>
+                <td>schema_integrity</td>
+                <td><span class="badge bg-danger">failed</span></td>
+                <td>0.0006s</td>
+                <td>tests\database\test_schema_integrity.py:123: in test_user_default_values
+    columns = {col["name"]: col for col in inspector.get_columns("users")}
+                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\engine\reflection.py:869: in get_columns
+    col_defs = self.dialect.get_columns(
+<string>:2: in get_columns
+    ???
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\engine\reflection.py:106: in cache
+    ret = fn(self, con, *args, **kw)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\dialects\sqlite\base.py:2435: in get_columns
+    raise exc.NoSuchTableError(
+E   sqlalchemy.exc.NoSuchTableError: users</td>
+            </tr>
+            
+            <tr>
+                <td>test_course_table_columns</td>
+                <td>schema_integrity</td>
+                <td><span class="badge bg-danger">failed</span></td>
+                <td>0.0005s</td>
+                <td>tests\database\test_schema_integrity.py:138: in test_course_table_columns
+    columns = {col["name"]: col for col in inspector.get_columns("courses")}
+                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\engine\reflection.py:869: in get_columns
+    col_defs = self.dialect.get_columns(
+<string>:2: in get_columns
+    ???
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\engine\reflection.py:106: in cache
+    ret = fn(self, con, *args, **kw)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\dialects\sqlite\base.py:2435: in get_columns
+    raise exc.NoSuchTableError(
+E   sqlalchemy.exc.NoSuchTableError: courses</td>
+            </tr>
+            
+            <tr>
+                <td>test_concept_table_columns</td>
+                <td>schema_integrity</td>
+                <td><span class="badge bg-danger">failed</span></td>
+                <td>0.0005s</td>
+                <td>tests\database\test_schema_integrity.py:155: in test_concept_table_columns
+    columns = {col["name"]: col for col in inspector.get_columns("concepts")}
+                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\engine\reflection.py:869: in get_columns
+    col_defs = self.dialect.get_columns(
+<string>:2: in get_columns
+    ???
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\engine\reflection.py:106: in cache
+    ret = fn(self, con, *args, **kw)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\dialects\sqlite\base.py:2435: in get_columns
+    raise exc.NoSuchTableError(
+E   sqlalchemy.exc.NoSuchTableError: concepts</td>
+            </tr>
+            
+            <tr>
+                <td>test_spaced_repetition_card_columns</td>
+                <td>schema_integrity</td>
+                <td><span class="badge bg-danger">failed</span></td>
+                <td>0.0005s</td>
+                <td>tests\database\test_schema_integrity.py:169: in test_spaced_repetition_card_columns
+    columns = {col["name"]: col for col in inspector.get_columns("spaced_repetition_cards")}
+                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\engine\reflection.py:869: in get_columns
+    col_defs = self.dialect.get_columns(
+<string>:2: in get_columns
+    ???
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\engine\reflection.py:106: in cache
+    ret = fn(self, con, *args, **kw)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\dialects\sqlite\base.py:2435: in get_columns
+    raise exc.NoSuchTableError(
+E   sqlalchemy.exc.NoSuchTableError: spaced_repetition_cards</td>
+            </tr>
+            
+            <tr>
+                <td>test_review_log_columns</td>
+                <td>schema_integrity</td>
+                <td><span class="badge bg-danger">failed</span></td>
+                <td>0.0005s</td>
+                <td>tests\database\test_schema_integrity.py:184: in test_review_log_columns
+    columns = {col["name"]: col for col in inspector.get_columns("review_logs")}
+                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\engine\reflection.py:869: in get_columns
+    col_defs = self.dialect.get_columns(
+<string>:2: in get_columns
+    ???
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\engine\reflection.py:106: in cache
+    ret = fn(self, con, *args, **kw)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\dialects\sqlite\base.py:2435: in get_columns
+    raise exc.NoSuchTableError(
+E   sqlalchemy.exc.NoSuchTableError: review_logs</td>
+            </tr>
+            
+            <tr>
+                <td>test_users_email_index</td>
+                <td>schema_integrity</td>
+                <td><span class="badge bg-danger">failed</span></td>
+                <td>0.0010s</td>
+                <td>tests\database\test_schema_integrity.py:201: in test_users_email_index
+    indexes = inspector.get_indexes("users")
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\engine\reflection.py:1145: in get_indexes
+    return self.dialect.get_indexes(
+<string>:2: in get_indexes
+    ???
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\engine\reflection.py:106: in cache
+    ret = fn(self, con, *args, **kw)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\dialects\sqlite\base.py:2977: in get_indexes
+    raise exc.NoSuchTableError(
+E   sqlalchemy.exc.NoSuchTableError: users</td>
+            </tr>
+            
+            <tr>
+                <td>test_users_username_index</td>
+                <td>schema_integrity</td>
+                <td><span class="badge bg-danger">failed</span></td>
+                <td>0.0007s</td>
+                <td>tests\database\test_schema_integrity.py:213: in test_users_username_index
+    indexes = inspector.get_indexes("users")
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\engine\reflection.py:1145: in get_indexes
+    return self.dialect.get_indexes(
+<string>:2: in get_indexes
+    ???
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\engine\reflection.py:106: in cache
+    ret = fn(self, con, *args, **kw)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\dialects\sqlite\base.py:2977: in get_indexes
+    raise exc.NoSuchTableError(
+E   sqlalchemy.exc.NoSuchTableError: users</td>
+            </tr>
+            
+            <tr>
+                <td>test_courses_domain_index</td>
+                <td>schema_integrity</td>
+                <td><span class="badge bg-danger">failed</span></td>
+                <td>0.0006s</td>
+                <td>tests\database\test_schema_integrity.py:225: in test_courses_domain_index
+    indexes = inspector.get_indexes("courses")
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\engine\reflection.py:1145: in get_indexes
+    return self.dialect.get_indexes(
+<string>:2: in get_indexes
+    ???
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\engine\reflection.py:106: in cache
+    ret = fn(self, con, *args, **kw)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\dialects\sqlite\base.py:2977: in get_indexes
+    raise exc.NoSuchTableError(
+E   sqlalchemy.exc.NoSuchTableError: courses</td>
+            </tr>
+            
+            <tr>
+                <td>test_enrollment_user_fk</td>
+                <td>schema_integrity</td>
+                <td><span class="badge bg-danger">failed</span></td>
+                <td>0.0007s</td>
+                <td>tests\database\test_schema_integrity.py:243: in test_enrollment_user_fk
+    fks = inspector.get_foreign_keys("enrollments")
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\engine\reflection.py:1057: in get_foreign_keys
+    return self.dialect.get_foreign_keys(
+<string>:2: in get_foreign_keys
+    ???
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\engine\reflection.py:106: in cache
+    ret = fn(self, con, *args, **kw)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\dialects\sqlite\base.py:2636: in get_foreign_keys
+    table_data = self._get_table_sql(connection, table_name, schema=schema)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<string>:2: in _get_table_sql
+    ???
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\engine\reflection.py:89: in cache
+    return fn(self, con, *args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\dialects\sqlite\base.py:3017: in _get_table_sql
+    raise exc.NoSuchTableError(f"{schema_expr}{table_name}")
+E   sqlalchemy.exc.NoSuchTableError: enrollments</td>
+            </tr>
+            
+            <tr>
+                <td>test_enrollment_course_fk</td>
+                <td>schema_integrity</td>
+                <td><span class="badge bg-danger">failed</span></td>
+                <td>0.0005s</td>
+                <td>tests\database\test_schema_integrity.py:256: in test_enrollment_course_fk
+    fks = inspector.get_foreign_keys("enrollments")
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\engine\reflection.py:1057: in get_foreign_keys
+    return self.dialect.get_foreign_keys(
+<string>:2: in get_foreign_keys
+    ???
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\engine\reflection.py:106: in cache
+    ret = fn(self, con, *args, **kw)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\dialects\sqlite\base.py:2636: in get_foreign_keys
+    table_data = self._get_table_sql(connection, table_name, schema=schema)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<string>:2: in _get_table_sql
+    ???
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\engine\reflection.py:89: in cache
+    return fn(self, con, *args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\dialects\sqlite\base.py:3017: in _get_table_sql
+    raise exc.NoSuchTableError(f"{schema_expr}{table_name}")
+E   sqlalchemy.exc.NoSuchTableError: enrollments</td>
+            </tr>
+            
+            <tr>
+                <td>test_spaced_repetition_card_user_fk</td>
+                <td>schema_integrity</td>
+                <td><span class="badge bg-danger">failed</span></td>
+                <td>0.0004s</td>
+                <td>tests\database\test_schema_integrity.py:269: in test_spaced_repetition_card_user_fk
+    fks = inspector.get_foreign_keys("spaced_repetition_cards")
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\engine\reflection.py:1057: in get_foreign_keys
+    return self.dialect.get_foreign_keys(
+<string>:2: in get_foreign_keys
+    ???
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\engine\reflection.py:106: in cache
+    ret = fn(self, con, *args, **kw)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\dialects\sqlite\base.py:2636: in get_foreign_keys
+    table_data = self._get_table_sql(connection, table_name, schema=schema)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<string>:2: in _get_table_sql
+    ???
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\engine\reflection.py:89: in cache
+    return fn(self, con, *args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\dialects\sqlite\base.py:3017: in _get_table_sql
+    raise exc.NoSuchTableError(f"{schema_expr}{table_name}")
+E   sqlalchemy.exc.NoSuchTableError: spaced_repetition_cards</td>
+            </tr>
+            
+            <tr>
+                <td>test_review_log_card_fk</td>
+                <td>schema_integrity</td>
+                <td><span class="badge bg-danger">failed</span></td>
+                <td>0.0005s</td>
+                <td>tests\database\test_schema_integrity.py:282: in test_review_log_card_fk
+    fks = inspector.get_foreign_keys("review_logs")
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\engine\reflection.py:1057: in get_foreign_keys
+    return self.dialect.get_foreign_keys(
+<string>:2: in get_foreign_keys
+    ???
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\engine\reflection.py:106: in cache
+    ret = fn(self, con, *args, **kw)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\dialects\sqlite\base.py:2636: in get_foreign_keys
+    table_data = self._get_table_sql(connection, table_name, schema=schema)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<string>:2: in _get_table_sql
+    ???
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\engine\reflection.py:89: in cache
+    return fn(self, con, *args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+..\..\..\AppData\Roaming\Python\Python312\site-packages\sqlalchemy\dialects\sqlite\base.py:3017: in _get_table_sql
+    raise exc.NoSuchTableError(f"{schema_expr}{table_name}")
+E   sqlalchemy.exc.NoSuchTableError: review_logs</td>
+            </tr>
+            
+            <tr>
+                <td>test_alembic_version_table_exists</td>
+                <td>schema_integrity</td>
+                <td><span class="badge bg-warning">skipped</span></td>
+                <td>0.0004s</td>
+                <td>('c:\\Users\\brock\\Documents\\NerdLearn\\NerdLearn\\tests\\database\\test_schema_integrity.py', 304, 'Skipped: alembic_version table not present (may be using fresh schema)')</td>
+            </tr>
+            
+            <tr>
+                <td>test_schema_is_up_to_date</td>
+                <td>schema_integrity</td>
+                <td><span class="badge bg-warning">skipped</span></td>
+                <td>0.0004s</td>
+                <td>('c:\\Users\\brock\\Documents\\NerdLearn\\NerdLearn\\tests\\database\\test_schema_integrity.py', 312, 'Skipped: Not using Alembic migrations')</td>
+            </tr>
+            
+            </tbody>
+        </table>
+
+        <!-- Benchmarks -->
+        <h2>Performance Benchmarks</h2>
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>Benchmark</th>
+                    <th>Metric</th>
+                    <th>Value</th>
+                    <th>Threshold</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td colspan='5'>No benchmarks recorded</td></tr>
+            </tbody>
+        </table>
+
+        <!-- Environment -->
+        <h2>Environment</h2>
+        <table class="table table-sm">
+            <tbody>
+                <tr><td><strong>python_version</strong></td><td>Python 3.12.10</td></tr><tr><td><strong>database</strong></td><td>sqlite+aiosqlite:///:memory:</td></tr><tr><td><strong>os</strong></td><td>nt</td></tr><tr><td><strong>timestamp</strong></td><td>2026-01-27T02:18:07.002689</td></tr>
+            </tbody>
+        </table>
+
+        <footer class="mt-4 text-muted">
+            <p>Duration: 6.22s</p>
+        </footer>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+        
