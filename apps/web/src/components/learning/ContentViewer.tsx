@@ -10,7 +10,14 @@ interface ContentViewerProps {
 
 export function ContentViewer({ card, onContinue }: ContentViewerProps) {
   return (
-    <div className="bg-white rounded-lg shadow-lg p-8 max-w-3xl mx-auto">
+    <div className="bg-white rounded-lg shadow-lg p-8 max-w-3xl mx-auto relative overflow-hidden">
+      {/* Rationale Badge */}
+      {card.rationale && (
+        <div className="absolute top-0 right-0 bg-blue-100 text-blue-800 text-[10px] font-bold px-3 py-1 rounded-bl-lg uppercase tracking-wider">
+          {card.rationale}
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center space-x-3">

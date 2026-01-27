@@ -17,6 +17,7 @@ interface User {
   email: string
   username: string
   role: string
+  age_group: 'early_childhood' | 'middle_childhood' | 'adolescence' | 'adult'
   created_at: string
 }
 

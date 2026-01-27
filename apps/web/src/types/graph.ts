@@ -13,6 +13,7 @@ export interface GraphNode {
     cardsReviewed?: number;
     totalCards?: number;
     bloomLevel?: string;
+    isLocked?: boolean;
     x?: number;
     y?: number;
     z?: number;
@@ -22,10 +23,12 @@ export interface GraphLink {
     source: string | GraphNode;
     target: string | GraphNode;
     type?: string;
+    weight?: number;
     confidence?: number;
 }
 
 export interface GraphData {
     nodes: GraphNode[];
-    links: GraphLink[];
+    links?: GraphLink[];
+    edges: GraphLink[];
 }

@@ -1,0 +1,73 @@
+{
+  "ingestion_timestamp": "2026-01-26T16:55:00Z",
+  "status": "manual_verification",
+  "modules": [
+    {
+      "id": "pdf_001",
+      "title": "Architecting Next-Generation Adaptive Learning Ecosystems",
+      "filename": "Adaptive Learning System Technical Research.pdf",
+      "category": "adaptive-learning",
+      "extracted_concepts": [
+        {
+          "name": "Deep Knowledge Tracing (DKT)",
+          "description": "Sequence modeling to infer latent knowledge states using RNNs/LSTMs.",
+          "relationships": ["supersedes:Bayesian Knowledge Tracing", "implemented_by:SAKT"]
+        },
+        {
+          "name": "Contextual Multi-Armed Bandits",
+          "description": "Optimizes instructional policies under uncertainty to balance exploration and exploitation.",
+          "relationships": ["uses:Thompson Sampling", "uses:LinUCB", "optimizes:Content Delivery"]
+        },
+        {
+          "name": "FlatFormer",
+          "description": "Efficient Transformer architecture for knowledge tracing that injects cognitive biases directly into input embeddings.",
+          "relationships": ["optimizes:Inference Latency", "improves:AUC"]
+        },
+        {
+          "name": "Federated Learning",
+          "description": "Privacy-preserving ML paradigm where models train locally on devices and only share gradients.",
+          "relationships": ["ensures:GDPR Compliance", "protects:Student Privacy"]
+        }
+      ],
+      "technical_implications": {
+        "latency_budget": "<100ms",
+        "infrastructure": ["Kafka", "Flink", "Redis", "Feature Store"],
+        "privacy_constraints": ["Data Minimization", "Differential Privacy"]
+      }
+    },
+    {
+      "id": "pdf_002",
+      "title": "Behavioral Architectures in Adaptive Education",
+      "filename": "Gamification in Education Research.pdf",
+      "category": "gamification",
+      "extracted_concepts": [
+        {
+          "name": "Octalysis Framework",
+          "description": "Gamification design framework dividing motivation into 8 core drives.",
+          "relationships": ["categorizes:White Hat vs Black Hat", "guides:Mechanic Selection"]
+        },
+        {
+          "name": "Variable Reward Schedules",
+          "description": "Probabilistic reward timing (VR/VI) to maximize engagement and maintain flow.",
+          "relationships": ["requires:Anti-Addiction Protocols", "triggers:Dopamine Prediction Error"]
+        },
+        {
+          "name": "Overjustification Effect",
+          "description": "Phenomenon where extrinsic rewards (badges) reduce intrinsic motivation.",
+          "relationships": ["mitigated_by:Adaptive Fading", "mitigated_by:Informational Feedback"]
+        },
+        {
+          "name": "Age-Appropriate Design",
+          "description": "Tailoring gamification mechanics to developmental stages (Pediatric, Adolescent, Adult).",
+          "relationships": ["requires:Distinct UI Profiles", "requires:Mechanic filtering"]
+        }
+      ],
+      "implementation_guidelines": {
+        "pediatric": ["Sensory Immediacy", "Narrative Encapsulation", "Tangible Rewards"],
+        "adolescent": ["Social Status", "Autonomy", "Identity Customization"],
+        "adult": ["Utility", "Efficiency", "Streak Mechanics"],
+        "safety": ["Compulsive Loop Detection", "Cooling Systems"]
+      }
+    }
+  ]
+}

@@ -76,18 +76,28 @@ export function KnowledgeGraphView({ data, onNodeClick, height = 600 }: Knowledg
     }
 
     const initialNodes: Node[] = data.nodes.map((node) => {
-      // Determine color based on mastery
+      // Determine color based on mastery and lock status (Research-aligned)
       const mastery = node.mastery || 0;
-      let borderColor = '#9ca3af'; // gray
-      let bgGradient = 'linear-gradient(135deg, #1f2937 0%, #111827 100%)';
+      const isLocked = node.isLocked ?? false;
+      
+      let borderColor = '#94a3b8'; // default slate-400
+      let bgGradient = 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)'; // default dark
+      let textColor = '#f8fafc';
 
-      if (mastery >= 0.8) {
-        borderColor = '#10b981'; // green
+      if (isLocked) {
+        borderColor = '#475569'; // slate-600
+        bgGradient = 'linear-gradient(135deg, #334155 0%, #1e293b 100%)';
+        textColor = '#94a3b8';
+      } else if (mastery >= 0.95) {
+        borderColor = '#10b981'; // emerald-500
         bgGradient = 'linear-gradient(135deg, #064e3b 0%, #065f46 100%)';
-      } else if (mastery >= 0.4) {
-        borderColor = '#f59e0b'; // yellow
-      } else if (mastery > 0) {
-        borderColor = '#ef4444'; // red
+      } else if (mastery >= 0.50) {
+        borderColor = '#f97316'; // orange-500
+        bgGradient = 'linear-gradient(135deg, #7c2d12 0%, #9a3412 100%)';
+      } else {
+        // Unlocked (0-50%)
+        borderColor = '#eab308'; // yellow-500
+        bgGradient = 'linear-gradient(135deg, #713f12 0%, #854d0e 100%)';
       }
 
       return {
@@ -95,16 +105,18 @@ export function KnowledgeGraphView({ data, onNodeClick, height = 600 }: Knowledg
         data: { label: node.name || node.label, originalNode: node },
         position: { x: 0, y: 0 },
         style: {
-          background: '#1f2937', // Fallback
+          background: '#1f2937', 
           backgroundImage: bgGradient,
-          color: '#fff',
+          color: textColor,
           border: `2px solid ${borderColor}`,
           borderRadius: '12px',
           padding: '10px',
           fontSize: '12px',
+          fontWeight: isLocked ? 'normal' : 'bold',
           width: 180,
           textAlign: 'center',
-          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
+          boxShadow: isLocked ? 'none' : '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+          opacity: isLocked ? 0.6 : 1,
         },
       };
     });
@@ -170,23 +182,23 @@ export function KnowledgeGraphView({ data, onNodeClick, height = 600 }: Knowledg
 
         {/* Legend Overlay */}
         <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur-sm rounded-lg p-4 shadow-lg border border-gray-200 text-xs">
-          <div className="font-semibold text-gray-700 mb-2">Mastery Levels</div>
+          <div className="font-semibold text-gray-700 mb-2">Skill Tree Status</div>
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded-full bg-emerald-500" />
-              <span className="text-gray-600">Mastered (≥80%)</span>
+              <span className="text-gray-600">Mastered (≥95%)</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-amber-500" />
-              <span className="text-gray-600">Learning (40-79%)</span>
+              <div className="w-3 h-3 rounded-full bg-orange-500" />
+              <span className="text-gray-600">Learning (50-94%)</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-red-500" />
-              <span className="text-gray-600">Struggling (1-39%)</span>
+              <div className="w-3 h-3 rounded-full bg-yellow-500" />
+              <span className="text-gray-600">Unlocked (0-49%)</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-gray-400" />
-              <span className="text-gray-600">Not Started</span>
+              <div className="w-3 h-3 rounded-full bg-slate-600" />
+              <span className="text-gray-600">Locked (Prereqs missing)</span>
             </div>
           </div>
         </div>

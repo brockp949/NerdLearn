@@ -48,3 +48,70 @@ goal_vectors:
       - "Progressive difficulty scaling"
       - "Aligned with learner's mastery state"
     pass_threshold: 0.75
+
+  # Database Testing Goal Vectors
+  schema_integrity:
+    name: "Schema Integrity"
+    description: "Database schema matches design specifications and supports all required operations"
+    constraints:
+      - "All expected tables exist with correct names"
+      - "Column types match specifications"
+      - "Primary keys are properly defined"
+      - "Indexes are configured for query patterns"
+      - "Constraints (unique, check, not null) are enforced"
+    pass_threshold: 0.95
+
+  data_integrity:
+    name: "Data Integrity"
+    description: "Data constraints are properly enforced to maintain consistency"
+    constraints:
+      - "Unique constraints prevent duplicate records"
+      - "NOT NULL constraints enforced on required fields"
+      - "Foreign keys maintain referential integrity"
+      - "Check constraints validate data ranges and formats"
+      - "No orphaned records or dangling references"
+    pass_threshold: 0.90
+
+  database_performance:
+    name: "Database Performance"
+    description: "Database operations meet latency and throughput requirements"
+    constraints:
+      - "Single record queries under 50ms"
+      - "Bulk inserts process efficiently"
+      - "Indexes improve query performance measurably"
+      - "No N+1 query patterns"
+      - "Connection pooling handles load"
+    pass_threshold: 0.80
+
+  concurrency_safety:
+    name: "Concurrency Safety"
+    description: "Database handles concurrent access without data corruption"
+    constraints:
+      - "No race conditions on concurrent updates"
+      - "Deadlocks detected and handled gracefully"
+      - "Isolation levels appropriate for use case"
+      - "Transactions maintain ACID properties"
+      - "Optimistic locking works correctly"
+    pass_threshold: 0.85
+
+  crud_correctness:
+    name: "CRUD Correctness"
+    description: "All CRUD operations work correctly for all entity types"
+    constraints:
+      - "Create operations insert complete records"
+      - "Read operations return accurate data"
+      - "Update operations modify only specified fields"
+      - "Delete operations cascade appropriately"
+      - "Soft deletes preserve audit trail"
+    pass_threshold: 0.90
+
+  relationship_integrity:
+    name: "Relationship Integrity"
+    description: "Entity relationships are properly maintained"
+    constraints:
+      - "One-to-many relationships correctly linked"
+      - "Many-to-many junction tables work correctly"
+      - "Cascade deletes remove dependent records"
+      - "Orphan prevention rules enforced"
+      - "Circular references handled appropriately"
+    pass_threshold: 0.90

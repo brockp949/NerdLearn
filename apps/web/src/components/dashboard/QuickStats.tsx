@@ -1,5 +1,7 @@
 'use client'
 
+import { AgeAppropriateLevelBar, type AgeGroup } from './AgeAppropriateLevelBar'
+
 export interface QuickStatsData {
   level: number
   totalXP: number
@@ -13,6 +15,7 @@ export interface QuickStatsData {
 
 export interface QuickStatsProps {
   stats: QuickStatsData
+  ageGroup?: AgeGroup
 }
 
 interface StatCardProps {
@@ -23,9 +26,10 @@ interface StatCardProps {
   color: 'blue' | 'green' | 'purple' | 'orange'
   showProgress?: boolean
   progress?: number // 0-100
+  children?: React.ReactNode
 }
 
-function StatCard({ icon, label, value, subtitle, color, showProgress, progress }: StatCardProps) {
+function StatCard({ icon, label, value, subtitle, color, showProgress, progress, children }: StatCardProps) {
   const colorClasses = {
     blue: 'from-blue-500 to-indigo-600',
     green: 'from-green-500 to-emerald-600',
@@ -43,7 +47,8 @@ function StatCard({ icon, label, value, subtitle, color, showProgress, progress 
       {subtitle && (
         <div className="text-xs opacity-75">{subtitle}</div>
       )}
-      {showProgress && progress !== undefined && (
+      {children}
+      {showProgress && !children && progress !== undefined && (
         <div className="mt-3">
           <div className="w-full bg-white bg-opacity-20 rounded-full h-1.5">
             <div
@@ -57,7 +62,7 @@ function StatCard({ icon, label, value, subtitle, color, showProgress, progress 
   )
 }
 
-export function QuickStats({ stats }: QuickStatsProps) {
+export function QuickStats({ stats, ageGroup = 'adult' }: QuickStatsProps) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
       <StatCard
@@ -66,9 +71,15 @@ export function QuickStats({ stats }: QuickStatsProps) {
         value={stats.level}
         subtitle={`${stats.xpToNextLevel} XP to next level`}
         color="purple"
-        showProgress={true}
-        progress={stats.levelProgress}
-      />
+      >
+        <div className="mt-4">
+          <AgeAppropriateLevelBar 
+            level={stats.level} 
+            progress={stats.levelProgress} 
+            ageGroup={ageGroup} 
+          />
+        </div>
+      </StatCard>
 
       <StatCard
         icon="📊"

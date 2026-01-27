@@ -8,8 +8,8 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 // ============================================================================
 
 export interface Reward {
-  id: str;
-  name: str;
+  id: string;
+  name: string;
   rarity: "common" | "rare" | "epic" | "legendary";
   reward_type: "xp" | "badge" | "streak_shield" | "cosmetic";
   value: any;

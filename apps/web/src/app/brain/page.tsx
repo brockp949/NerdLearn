@@ -18,30 +18,43 @@ export default function BrainPage() {
 
     const nodeThreeObject = useMemo(() => (node: any) => {
         const n = node as GraphNode;
-        const color = n.type === 'concept' ? "#3b82f6" : "#ffffff";
+        const mastery = n.mastery || 0;
+        const isLocked = n.isLocked ?? false;
+
+        // Color Palette (Research-aligned)
+        let color = "#eab308"; // Default Yellow (Unlocked)
+        if (isLocked) {
+            color = "#475569"; // Gray (Locked)
+        } else if (mastery >= 0.95) {
+            color = "#10b981"; // Emerald (Mastered)
+        } else if (mastery >= 0.50) {
+            color = "#f97316"; // Orange (Learning)
+        }
 
         // Use a standard mesh with emissive properties for "mastery pulsing"
-        const geometry = new THREE.SphereGeometry(6);
+        const geometry = new THREE.SphereGeometry(isLocked ? 4 : 6);
         const material = new THREE.MeshStandardMaterial({
             color: color,
             transparent: true,
-            opacity: 0.9,
+            opacity: isLocked ? 0.5 : 0.9,
             emissive: color,
-            emissiveIntensity: 0.8
+            emissiveIntensity: isLocked ? 0.2 : 0.8
         });
 
         const mesh = new THREE.Mesh(geometry, material);
 
         // Track mesh for optimized animation (avoids scene traversal)
-        meshRefs.current.push(mesh);
+        if (!isLocked) {
+            meshRefs.current.push(mesh);
+        }
 
-        // Add a subtle bloom-like aura if mastery is high (placeholder logic)
-        if (n.difficulty !== undefined && n.difficulty < 3) {
-            const auraGeom = new THREE.SphereGeometry(8);
+        // Add a subtle bloom-like aura if mastery is high (Elite status)
+        if (mastery >= 0.95) {
+            const auraGeom = new THREE.SphereGeometry(9);
             const auraMat = new THREE.MeshBasicMaterial({
                 color: color,
                 transparent: true,
-                opacity: 0.2
+                opacity: 0.15
             });
             const aura = new THREE.Mesh(auraGeom, auraMat);
             mesh.add(aura);

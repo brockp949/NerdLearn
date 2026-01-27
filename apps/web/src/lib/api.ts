@@ -330,4 +330,55 @@ export const multimodalApi = {
     },
 };
 
+// =============================================================================
+// GAMIFICATION API
+// =============================================================================
+
+export const gamificationApi = {
+    getProfile: async (userId: number) => {
+        const response = await api.get(`/gamification/profile/${userId}`);
+        return response.data;
+    },
+
+    getAchievements: async (userId: number) => {
+        const response = await api.get('/gamification/achievements', {
+            params: { user_id: userId }
+        });
+        return response.data;
+    },
+
+    getSkillTree: async (userId: number, courseId: number) => {
+        const response = await api.get('/gamification/skill-tree', {
+            params: { user_id: userId, course_id: courseId }
+        });
+        return response.data;
+    },
+
+    getLeaderboard: async (courseId?: number) => {
+        const response = await api.get('/gamification/leaderboard', {
+            params: { course_id: courseId }
+        });
+        return response.data;
+    },
+
+    triggerReward: async (data: {
+        user_id: number;
+        mastery_level: number;
+        age_group: string;
+    }) => {
+        const response = await api.post('/gamification/trigger-reward', data);
+        return response.data;
+    },
+
+    awardXP: async (data: {
+        user_id: number;
+        action: string;
+        multiplier?: number;
+        is_first_time?: boolean;
+    }) => {
+        const response = await api.post('/gamification/xp/award', data);
+        return response.data;
+    },
+};
+
 export default api;

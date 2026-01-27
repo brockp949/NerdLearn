@@ -45,8 +45,8 @@ export const QuestionCard = memo(function QuestionCard({ card, onAnswer, loading
     <div className="bg-white rounded-lg shadow-lg p-8 max-w-3xl mx-auto relative overflow-hidden">
       {/* Rationale Badge */}
       {card.rationale && (
-        <div className="absolute top-0 right-0 bg-blue-100 text-blue-800 text-xs font-semibold px-3 py-1 rounded-bl-lg">
-          {card.rationale}
+        <div className="absolute top-0 right-0 bg-blue-600 text-white text-[10px] font-bold px-4 py-1.5 rounded-bl-xl shadow-md flex items-center gap-1.5 uppercase tracking-tighter">
+          <span className="text-xs">🧠</span> {card.rationale}
         </div>
       )}
 

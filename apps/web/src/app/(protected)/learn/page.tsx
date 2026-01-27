@@ -15,6 +15,7 @@ import { SidebarTabs } from '@/components/learning/SidebarTabs'
 import { ChatInterface } from '@/components/chat/chat-interface'
 import { KnowledgeGraphView } from '@/components/analytics/KnowledgeGraphView'
 import { useGraphData } from '@/hooks/use-graph-data'
+import { XPGainNotification } from '@/components/learning/XPGainNotification'
 
 interface SessionState {
   session_id: string
@@ -62,7 +63,7 @@ export default function LearnPage() {
   const [telemetryConnected, setTelemetryConnected] = useState(false)
   const [hesitationCount, setHesitationCount] = useState(0)
 
-  const API_URL = 'http://localhost:8005'
+  const API_URL = '/api/session'
 
   const startSession = async () => {
     setLoading(true)
@@ -437,6 +438,19 @@ export default function LearnPage() {
               </div>
             )}
           </main>
+        )}
+
+        {/* Global Notifications */}
+        {lastResponse && (lastResponse.xp_earned > 0 || (lastResponse as any).level_up) && (
+          <XPGainNotification 
+            xp={lastResponse.xp_earned} 
+            levelUp={(lastResponse as any).level_up}
+            newLevel={lastResponse.level}
+            ageGroup={(user?.age_group as any) || 'adult'} 
+            onComplete={() => {
+              // Optionally clear the XP notification state here if needed
+            }}
+          />
         )}
       </div>
     </ProtectedRoute>

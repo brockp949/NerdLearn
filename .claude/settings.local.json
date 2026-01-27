@@ -71,7 +71,8 @@
       "Bash(ls:*)",
       "Bash(npx tsc:*)",
       "Bash(timeout:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(python3:*)"
     ],
     "deny": [],
     "ask": []

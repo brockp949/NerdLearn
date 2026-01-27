@@ -6,16 +6,46 @@ import { useAuth } from '@/lib/auth-context'
 import { QuickStats, type QuickStatsData } from '@/components/dashboard/QuickStats'
 import { ActivityTimeline, type Activity } from '@/components/dashboard/ActivityTimeline'
 import { InsightsPanel, type LearningInsights } from '@/components/dashboard/InsightsPanel'
+import { RecentAchievements, type Achievement as AchievementData } from '@/components/dashboard/RecentAchievements'
 
 // Mock data generators
 const generateMockStats = (): QuickStatsData => ({
   level: 5,
   totalXP: 1247,
-  xpToNextLevel: 223, // 1470 - 1247
+  xpToNextLevel: 223,
+  levelProgress: 82, // Percentage of progress in current level
   currentStreak: 12,
+  streakShields: 2,   // Added streak shields
   cardsReviewed: 145,
   conceptsMastered: 4
 })
+
+const generateMockAchievements = (): AchievementData[] => ([
+  {
+    id: 'a1',
+    name: 'First Steps',
+    description: 'Complete your first module',
+    icon: '🎯',
+    unlockedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+    rarity: 'common'
+  },
+  {
+    id: 'a2',
+    name: 'Week Warrior',
+    description: 'Maintain a 7-day learning streak',
+    icon: '🔥',
+    unlockedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    rarity: 'rare'
+  },
+  {
+    id: 'a3',
+    name: 'Speed Learner',
+    description: 'Complete a course in under 7 days',
+    icon: '⚡',
+    unlockedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+    rarity: 'rare'
+  }
+])
 
 const generateMockActivities = (): Activity[] => {
   const now = new Date()
@@ -78,6 +108,7 @@ export default function DashboardPage() {
   const { user, logout } = useAuth()
   const [stats, setStats] = useState<QuickStatsData | null>(null)
   const [activities, setActivities] = useState<Activity[]>([])
+  const [achievements, setAchievements] = useState<AchievementData[]>([])
   const [insights, setInsights] = useState<LearningInsights | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -99,6 +130,7 @@ export default function DashboardPage() {
     setTimeout(() => {
       setStats(generateMockStats())
       setActivities(generateMockActivities())
+      setAchievements(generateMockAchievements())
       setInsights(generateMockInsights())
       setLoading(false)
     }, 500)
@@ -176,12 +208,15 @@ export default function DashboardPage() {
           </div>
 
           {/* Quick Stats */}
-          {stats && <QuickStats stats={stats} />}
+          {stats && <QuickStats stats={stats} ageGroup={user?.age_group} />}
 
           {/* Two Column Layout */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Main Content */}
             <div className="lg:col-span-2 space-y-6">
+              {/* Recent Achievements */}
+              <RecentAchievements achievements={achievements} />
+
               {/* Activity Timeline */}
               <ActivityTimeline activities={activities} maxItems={5} />
 

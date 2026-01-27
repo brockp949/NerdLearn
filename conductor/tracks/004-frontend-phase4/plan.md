@@ -8,7 +8,7 @@ The backend now supports complex adaptive learning (Interleaved Practice, RL), c
 ## Plan
 
 ### 1. Gamification UI
-- [ ] **Reward Modal**: Create a "Loot Drop" component to display variable rewards (XP boosts, Badges, Streak Shields) with age-appropriate visuals (`apps/web/src/components/gamification/RewardModal.tsx`).
+- [x] **Reward Modal**: Create a "Loot Drop" component to display variable rewards (XP boosts, Badges, Streak Shields) with age-appropriate visuals (`apps/web/src/components/gamification/RewardModal.tsx`).
 - [ ] **Dashboard Updates**: Update the main dashboard to show:
     - Current Level (with age-appropriate curve visualization).
     - Active Streak & Streak Shields available.
@@ -17,7 +17,7 @@ The backend now supports complex adaptive learning (Interleaved Practice, RL), c
 
 ### 2. Adaptive Learning UI
 - [ ] **Interleaved Session View**: Update the learning session interface to indicate *why* a specific card is shown (e.g., "Spaced Repetition due", "Interleaved Practice", "Prerequisite Check").
-- [ ] **Knowledge Graph Visualization**: Create a visual graph component (using `react-force-graph` or similar) to render the Causal Discovery results (Concepts and Edges).
+- [x] **Knowledge Graph Visualization**: Create a visual graph component (using `react-force-graph` or similar) to render the Causal Discovery results (Concepts and Edges).
 
 ### 3. Integration
 - [ ] **API Clients**: Update `apps/web/src/lib/api.ts` (or equivalent) to include methods for:

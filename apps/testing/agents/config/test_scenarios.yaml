@@ -79,3 +79,180 @@ scenarios:
         expected_behavior:
           confidence_threshold: 0.3
           should_warn: true
+
+  # Database Testing Scenarios
+  database_schema:
+    name: "Database Schema Validation"
+    description: "Verify database schema integrity and structure"
+    goal_vector: "schema_integrity"
+    test_cases:
+      - name: "Core tables exist"
+        input:
+          tables:
+            - users
+            - cards
+            - decks
+            - review_logs
+            - learning_sessions
+        expected:
+          all_exist: true
+          has_primary_keys: true
+
+      - name: "Index coverage"
+        input:
+          query_patterns:
+            - "SELECT * FROM cards WHERE user_id = ?"
+            - "SELECT * FROM review_logs WHERE card_id = ? ORDER BY reviewed_at"
+            - "SELECT * FROM learning_sessions WHERE user_id = ? AND status = 'active'"
+        expected:
+          indexes_support_queries: true
+          no_full_table_scans: true
+
+  database_crud:
+    name: "CRUD Operations Validation"
+    description: "Test Create, Read, Update, Delete operations"
+    goal_vector: "crud_correctness"
+    test_cases:
+      - name: "User lifecycle"
+        input:
+          entity: "user"
+          operations:
+            - create: {email: "test@example.com", name: "Test User"}
+            - read: {by: "email"}
+            - update: {name: "Updated Name"}
+            - delete: {soft: true}
+        expected:
+          all_operations_succeed: true
+          soft_delete_preserves_data: true
+
+      - name: "Card with relationships"
+        input:
+          entity: "card"
+          operations:
+            - create: {deck_id: "existing", front: "Q", back: "A"}
+            - read: {include_relationships: true}
+            - update: {front: "Updated Q"}
+            - delete: {cascade: true}
+        expected:
+          relationships_loaded: true
+          cascade_removes_reviews: true
+
+  database_relationships:
+    name: "Relationship Integrity Tests"
+    description: "Verify foreign key relationships and cascades"
+    goal_vector: "relationship_integrity"
+    test_cases:
+      - name: "User-Deck relationship"
+        input:
+          parent: "user"
+          child: "deck"
+          relationship: "one-to-many"
+        expected:
+          foreign_key_enforced: true
+          cascade_on_delete: true
+          orphans_prevented: true
+
+      - name: "Card-Review relationship"
+        input:
+          parent: "card"
+          child: "review_log"
+          relationship: "one-to-many"
+        expected:
+          foreign_key_enforced: true
+          historical_data_preserved: false  # Reviews deleted with card
+          timestamps_accurate: true
+
+  database_performance:
+    name: "Performance Benchmark Scenarios"
+    description: "Test database performance under various loads"
+    goal_vector: "database_performance"
+    test_cases:
+      - name: "Single record operations"
+        input:
+          operation: "select"
+          record_count: 1
+          complexity: "simple"
+        expected:
+          latency_ms_max: 50
+          consistent_timing: true
+
+      - name: "Bulk insert performance"
+        input:
+          operation: "bulk_insert"
+          record_count: 1000
+          batch_size: 100
+        expected:
+          records_per_second_min: 500
+          no_timeout: true
+
+      - name: "Complex query with joins"
+        input:
+          operation: "select"
+          tables: ["cards", "decks", "users"]
+          joins: 2
+          filters: ["user_id", "status"]
+        expected:
+          uses_indexes: true
+          latency_ms_max: 200
+
+  database_concurrency:
+    name: "Concurrency Testing Scenarios"
+    description: "Test behavior under concurrent access"
+    goal_vector: "concurrency_safety"
+    test_cases:
+      - name: "Concurrent card updates"
+        input:
+          entity: "card"
+          concurrent_writers: 5
+          operation: "update"
+          field: "review_count"
+        expected:
+          no_lost_updates: true
+          final_count_accurate: true
+
+      - name: "Session isolation"
+        input:
+          scenario: "read_uncommitted_data"
+          transaction_isolation: "read_committed"
+        expected:
+          dirty_reads_prevented: true
+          phantom_reads_handled: true
+
+      - name: "Deadlock resolution"
+        input:
+          scenario: "circular_lock"
+          entities: ["user", "deck", "card"]
+        expected:
+          deadlock_detected: true
+          transaction_retried: true
+          data_consistent: true
+
+  database_data_integrity:
+    name: "Data Integrity Validation"
+    description: "Test constraints and data validation"
+    goal_vector: "data_integrity"
+    test_cases:
+      - name: "Unique email constraint"
+        input:
+          entity: "user"
+          field: "email"
+          duplicate_value: "existing@example.com"
+        expected:
+          insert_rejected: true
+          error_type: "unique_violation"
+
+      - name: "Required field validation"
+        input:
+          entity: "card"
+          missing_fields: ["front", "back"]
+        expected:
+          insert_rejected: true
+          error_identifies_field: true
+
+      - name: "Foreign key enforcement"
+        input:
+          entity: "card"
+          invalid_reference: {deck_id: "nonexistent"}
+        expected:
+          insert_rejected: true
+          error_type: "foreign_key_violation"

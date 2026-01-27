@@ -28,6 +28,14 @@ from .architect_agent import ArchitectAgent, PRReviewResult
 from .refiner_agent import RefinerAgent, TDFlowPlan, GeneratedTest
 from .fuel_meter import FuelMeter, FuelBudget, FuelUsageReport
 from .topological_auditor import TopologicalAuditor, TopologyAuditResult
+from .database_verifier import (
+    DatabaseVerifier,
+    DatabaseTestCategory,
+    DatabaseTestResult,
+    DatabaseAuditReport,
+    create_database_verifier,
+    DATABASE_GOAL_VECTORS
+)
 from .llm_client import (
     create_llm_client,
     get_default_client,
@@ -41,29 +49,37 @@ from .llm_client import (
 
 __all__ = [
     # Verifier (Semantic Truth)
-    'VerifierAgent', 
+    'VerifierAgent',
     'GoalVector',
-    
+
     # Peer (Resilience)
     'AdversarialPeer',
     'PoisonType',
-    
+
     # Architect (Topological)
     'ArchitectAgent',
     'PRReviewResult',
     'TopologicalAuditor',
     'TopologyAuditResult',
-    
+
     # Refiner (TDFlow)
     'RefinerAgent',
     'TDFlowPlan',
     'GeneratedTest',
-    
+
     # Fuel Meter (Cost Control)
     'FuelMeter',
     'FuelBudget',
     'FuelUsageReport',
-    
+
+    # Database Verifier (Data Integrity)
+    'DatabaseVerifier',
+    'DatabaseTestCategory',
+    'DatabaseTestResult',
+    'DatabaseAuditReport',
+    'create_database_verifier',
+    'DATABASE_GOAL_VECTORS',
+
     # LLM Client (Multi-Provider)
     'create_llm_client',
     'get_default_client',
