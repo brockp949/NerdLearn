@@ -38,3 +38,10 @@ export {
   useCodeChallenge,
   useChallengeList,
 } from './use-social';
+
+// Antigravity Testing Framework
+export {
+  useTestSummary,
+  useTestSuite,
+  useRunTests,
+} from './use-tests';

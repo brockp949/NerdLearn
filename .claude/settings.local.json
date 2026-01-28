@@ -72,7 +72,15 @@
       "Bash(npx tsc:*)",
       "Bash(timeout:*)",
       "Bash(npm install:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(python3 -m pytest:*)",
+      "Bash(poetry run pytest:*)",
+      "Bash(/usr/bin/python3.12 -m pip:*)",
+      "Bash(npm:*)",
+      "Bash(netstat:*)",
+      "Bash(lsof:*)",
+      "Bash(ss:*)",
+      "Bash(pkill:*)"
     ],
     "deny": [],
     "ask": []

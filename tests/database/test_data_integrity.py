@@ -14,19 +14,20 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .conftest import UserFactory, CourseFactory, ConceptFactory
+from .conftest import (
+    UserFactory, CourseFactory, ConceptFactory, User, Course, Enrollment,
+    Concept, SpacedRepetitionCard, ReviewLog, UserAchievement, UserStats,
+    Instructor, TestBase
+)
 
-pytestmark = [pytest.mark.requires_db, pytest.mark.unit]
+pytestmark = [pytest.mark.asyncio]
 
 
 class TestUniqueConstraints:
     """Test unique constraint enforcement."""
 
-    @pytest.mark.asyncio
     async def test_duplicate_email_rejected(self, async_session: AsyncSession):
         """Verify duplicate email addresses are rejected."""
-        from app.models.user import User
-
         # Create first user
         user1_data = UserFactory.create(email="unique@example.com")
         user1 = User(**user1_data)
@@ -41,11 +42,8 @@ class TestUniqueConstraints:
         with pytest.raises(IntegrityError):
             await async_session.commit()
 
-    @pytest.mark.asyncio
     async def test_duplicate_username_rejected(self, async_session: AsyncSession):
         """Verify duplicate usernames are rejected."""
-        from app.models.user import User
-
         # Create first user
         user1_data = UserFactory.create(username="uniqueuser")
         user1 = User(**user1_data)
@@ -60,11 +58,8 @@ class TestUniqueConstraints:
         with pytest.raises(IntegrityError):
             await async_session.commit()
 
-    @pytest.mark.asyncio
     async def test_case_sensitivity_email(self, async_session: AsyncSession):
         """Test email case sensitivity handling."""
-        from app.models.user import User
-
         user1_data = UserFactory.create(email="Test@Example.com")
         user1 = User(**user1_data)
         async_session.add(user1)
@@ -88,11 +83,8 @@ class TestUniqueConstraints:
 class TestNotNullConstraints:
     """Test NOT NULL constraint enforcement."""
 
-    @pytest.mark.asyncio
     async def test_user_email_required(self, async_session: AsyncSession):
         """Verify user email cannot be null."""
-        from app.models.user import User
-
         user_data = UserFactory.create()
         user_data["email"] = None
         user = User(**user_data)
@@ -101,11 +93,8 @@ class TestNotNullConstraints:
         with pytest.raises(IntegrityError):
             await async_session.commit()
 
-    @pytest.mark.asyncio
     async def test_user_username_required(self, async_session: AsyncSession):
         """Verify user username cannot be null."""
-        from app.models.user import User
-
         user_data = UserFactory.create()
         user_data["username"] = None
         user = User(**user_data)
@@ -114,11 +103,8 @@ class TestNotNullConstraints:
         with pytest.raises(IntegrityError):
             await async_session.commit()
 
-    @pytest.mark.asyncio
     async def test_user_password_required(self, async_session: AsyncSession):
         """Verify user password hash cannot be null."""
-        from app.models.user import User
-
         user_data = UserFactory.create()
         user_data["hashed_password"] = None
         user = User(**user_data)
@@ -131,11 +117,8 @@ class TestNotNullConstraints:
 class TestForeignKeyConstraints:
     """Test foreign key constraint enforcement."""
 
-    @pytest.mark.asyncio
     async def test_enrollment_requires_valid_user(self, async_session: AsyncSession):
         """Verify enrollment cannot reference non-existent user."""
-        from app.models.course import Course, Enrollment
-
         # Create course
         course_data = CourseFactory.create()
         course = Course(**course_data)
@@ -153,12 +136,8 @@ class TestForeignKeyConstraints:
         with pytest.raises(IntegrityError):
             await async_session.commit()
 
-    @pytest.mark.asyncio
     async def test_enrollment_requires_valid_course(self, async_session: AsyncSession):
         """Verify enrollment cannot reference non-existent course."""
-        from app.models.user import User
-        from app.models.course import Enrollment
-
         # Create user
         user_data = UserFactory.create()
         user = User(**user_data)
@@ -176,13 +155,10 @@ class TestForeignKeyConstraints:
         with pytest.raises(IntegrityError):
             await async_session.commit()
 
-    @pytest.mark.asyncio
     async def test_spaced_repetition_card_requires_valid_user(
         self, async_session: AsyncSession
     ):
         """Verify spaced repetition card requires valid user."""
-        from app.models.spaced_repetition import SpacedRepetitionCard, Concept
-
         # Create concept
         concept = Concept(name="Test Concept", description="Test")
         async_session.add(concept)
@@ -207,11 +183,8 @@ class TestForeignKeyConstraints:
 class TestDataValidation:
     """Test application-level data validation rules."""
 
-    @pytest.mark.asyncio
     async def test_user_xp_non_negative(self, async_session: AsyncSession):
         """Verify XP cannot be negative (application rule)."""
-        from app.models.user import User
-
         user_data = UserFactory.create(total_xp=-100)
         user = User(**user_data)
         async_session.add(user)
@@ -226,11 +199,8 @@ class TestDataValidation:
             # DB constraint exists
             assert True
 
-    @pytest.mark.asyncio
     async def test_user_level_positive(self, async_session: AsyncSession):
         """Verify user level must be positive."""
-        from app.models.user import User
-
         user_data = UserFactory.create(level=0)
         user = User(**user_data)
         async_session.add(user)
@@ -244,12 +214,8 @@ class TestDataValidation:
             # DB constraint exists
             assert True
 
-    @pytest.mark.asyncio
     async def test_progress_percentage_range(self, async_session: AsyncSession):
         """Verify progress is between 0 and 1."""
-        from app.models.user import User
-        from app.models.course import Course, Enrollment
-
         # Create user and course
         user = User(**UserFactory.create())
         course = Course(**CourseFactory.create())
@@ -272,12 +238,8 @@ class TestDataValidation:
             # DB constraint exists
             assert True
 
-    @pytest.mark.asyncio
     async def test_fsrs_difficulty_range(self, async_session: AsyncSession):
         """Verify FSRS difficulty is within expected range (1-10)."""
-        from app.models.user import User
-        from app.models.spaced_repetition import SpacedRepetitionCard, Concept
-
         # Create user and concept
         user = User(**UserFactory.create())
         concept = Concept(name="Test", description="Test")
@@ -307,12 +269,8 @@ class TestDataValidation:
 class TestDataConsistency:
     """Test data consistency rules across related tables."""
 
-    @pytest.mark.asyncio
     async def test_user_stats_matches_achievements(self, async_session: AsyncSession):
         """Verify user stats are consistent with achievements."""
-        from app.models.user import User
-        from app.models.gamification import UserStats, UserAchievement
-
         # Create user with stats
         user = User(**UserFactory.create())
         async_session.add(user)
@@ -354,12 +312,8 @@ class TestDataConsistency:
         # Real enforcement should be in application layer or triggers
         assert count >= 0  # At minimum, count should be valid
 
-    @pytest.mark.asyncio
     async def test_review_log_timestamp_consistency(self, async_session: AsyncSession):
         """Verify review timestamps are logically consistent."""
-        from app.models.user import User
-        from app.models.spaced_repetition import SpacedRepetitionCard, Concept, ReviewLog
-
         # Create user and concept
         user = User(**UserFactory.create())
         concept = Concept(name="Test", description="Test")
@@ -400,11 +354,8 @@ class TestDataConsistency:
 class TestEdgeCases:
     """Test edge cases and boundary conditions."""
 
-    @pytest.mark.asyncio
     async def test_empty_string_vs_null(self, async_session: AsyncSession):
         """Verify distinction between empty string and NULL."""
-        from app.models.user import User
-
         # Create user with empty full_name (not NULL)
         user_data = UserFactory.create(full_name="")
         user = User(**user_data)
@@ -416,11 +367,8 @@ class TestEdgeCases:
         # Empty string should be preserved, not converted to NULL
         assert user.full_name == "" or user.full_name is None
 
-    @pytest.mark.asyncio
     async def test_very_long_strings(self, async_session: AsyncSession):
         """Test handling of very long string values."""
-        from app.models.user import User
-
         # Test with very long username (may exceed column limit)
         long_username = "a" * 1000
         user_data = UserFactory.create(username=long_username)
@@ -437,11 +385,8 @@ class TestEdgeCases:
             # String too long for column
             assert True
 
-    @pytest.mark.asyncio
     async def test_unicode_characters(self, async_session: AsyncSession):
         """Verify unicode characters are handled correctly."""
-        from app.models.user import User
-
         # Test with various unicode characters
         unicode_name = "José García 日本語 🎓"
         user_data = UserFactory.create(full_name=unicode_name)
@@ -452,11 +397,8 @@ class TestEdgeCases:
         await async_session.refresh(user)
         assert user.full_name == unicode_name
 
-    @pytest.mark.asyncio
     async def test_timestamp_precision(self, async_session: AsyncSession):
         """Verify timestamp precision is maintained."""
-        from app.models.user import User
-
         user_data = UserFactory.create()
         user = User(**user_data)
         async_session.add(user)

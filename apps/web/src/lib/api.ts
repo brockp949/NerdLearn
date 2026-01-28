@@ -334,6 +334,56 @@ export const multimodalApi = {
 // GAMIFICATION API
 // =============================================================================
 
+// =============================================================================
+// TESTING API
+// =============================================================================
+
+export const testingApi = {
+    getSummary: async () => {
+        const response = await api.get('/testing/summary');
+        return response.data;
+    },
+
+    getSuite: async (suiteId: string) => {
+        const response = await api.get(`/testing/suites/${suiteId}`);
+        return response.data;
+    },
+
+    getTests: async (category?: string, status?: string) => {
+        const response = await api.get('/testing/tests', {
+            params: { category, status },
+        });
+        return response.data;
+    },
+
+    getFailedTests: async () => {
+        const response = await api.get('/testing/failed');
+        return response.data;
+    },
+
+    runTests: async (suiteId?: string, testPath?: string) => {
+        const response = await api.post('/testing/run', {
+            suite_id: suiteId,
+            test_path: testPath,
+        });
+        return response.data;
+    },
+
+    getAntigravityResults: async () => {
+        const response = await api.get('/testing/antigravity');
+        return response.data;
+    },
+
+    clearCache: async () => {
+        const response = await api.delete('/testing/cache');
+        return response.data;
+    },
+};
+
+// =============================================================================
+// GAMIFICATION API
+// =============================================================================
+
 export const gamificationApi = {
     getProfile: async (userId: number) => {
         const response = await api.get(`/gamification/profile/${userId}`);

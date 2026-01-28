@@ -24,6 +24,7 @@ from app.routers import (
     admin,
     alga_next,
     counterfactual,
+    testing,
 )
 
 logger = logging.getLogger(__name__)
@@ -71,6 +72,8 @@ app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 app.include_router(alga_next.router, prefix="/api", tags=["ALGA-Next Adaptive Learning"])
 # Counterfactual Explanations: Causal analysis, recourse, and Socratic dialogue
 app.include_router(counterfactual.router, prefix="/api/counterfactual", tags=["counterfactual"])
+# Antigravity Testing: Test results and execution
+app.include_router(testing.router, prefix="/api/testing", tags=["testing"])
 
 
 @app.get("/")

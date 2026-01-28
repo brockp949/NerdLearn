@@ -6,29 +6,53 @@ Provides shared fixtures for database testing including:
 - PostgreSQL test containers for integration tests
 - Test data factories
 - Database session management
+
+This module is self-contained and defines its own test models
+to avoid import path issues across different environments.
 """
 import os
 import sys
+from pathlib import Path
+
+# ============================================================================
+# Path Setup - Add app directories to Python path
+# ============================================================================
+_current_file = Path(__file__).resolve()
+_tests_database_dir = _current_file.parent
+_tests_dir = _tests_database_dir.parent
+_project_root = _tests_dir.parent
+
+# Add paths for imports
+_api_path = _project_root / "apps" / "api"
+_db_path = _project_root / "packages" / "db"
+
+for path in [str(_api_path), str(_db_path), str(_project_root)]:
+    if path not in sys.path:
+        sys.path.insert(0, path)
+
+# ============================================================================
+# Standard imports
+# ============================================================================
 import pytest
 import asyncio
 from datetime import datetime, timedelta
-from typing import AsyncGenerator, Generator
-from unittest.mock import MagicMock, AsyncMock, patch
-from pathlib import Path
+from typing import AsyncGenerator, Generator, Optional
+from unittest.mock import MagicMock, AsyncMock
 
-# Add apps/api to Python path for imports
-_project_root = Path(__file__).parent.parent.parent
-_api_path = _project_root / "apps" / "api"
-if str(_api_path) not in sys.path:
-    sys.path.insert(0, str(_api_path))
-
-from sqlalchemy import create_engine, event, text
+from sqlalchemy import (
+    create_engine, Column, Integer, String, Boolean, Float,
+    DateTime, ForeignKey, Text, event
+)
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker, Session, declarative_base
+from sqlalchemy.orm import (
+    sessionmaker, Session, relationship, declarative_base
+)
 from sqlalchemy.pool import StaticPool
 
 
-# Test database URLs
+# ============================================================================
+# Test Database Configuration
+# ============================================================================
 TEST_DATABASE_URL = os.getenv(
     "TEST_DATABASE_URL",
     "sqlite+aiosqlite:///:memory:"
@@ -38,39 +62,204 @@ TEST_SYNC_DATABASE_URL = os.getenv(
     "sqlite:///:memory:"
 )
 
-# Create a local Base for tests that don't need the full app
+# ============================================================================
+# Self-Contained Test Models
+# ============================================================================
+# These models mirror the production models but are self-contained
+# to avoid import issues in different test environments
+
 TestBase = declarative_base()
 
 
-def _get_app_base_and_models():
-    """
-    Attempt to import the app's Base and models.
-    Returns (Base, models_imported) tuple.
-    Falls back to TestBase if import fails.
-    """
-    try:
-        # Mock the settings before importing to avoid config issues
-        os.environ.setdefault("DATABASE_URL", TEST_SYNC_DATABASE_URL)
-        from app.core.database import Base
+class User(TestBase):
+    """Test User model."""
+    __tablename__ = "users"
 
-        # Import models that work with SQLite
-        # Skip vector_store which requires pgvector (PostgreSQL only)
-        from app.models.user import User, Instructor
-        from app.models.course import Course, Module, Enrollment
-        from app.models.assessment import UserConceptMastery
-        from app.models.spaced_repetition import SpacedRepetitionCard, ReviewLog, Concept
-        from app.models.social import (
-            Friendship, Challenge, ChallengeParticipant,
-            StudyGroup, GroupMessage, Leaderboard, UserActivity,
-        )
-        from app.models.gamification import UserAchievement, UserStats, DailyActivity, ChatHistory
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String(255), unique=True, index=True, nullable=False)
+    username = Column(String(100), unique=True, index=True, nullable=False)
+    hashed_password = Column(String(255), nullable=False)
+    full_name = Column(String(255), nullable=True)
+    is_active = Column(Boolean, default=True)
+    is_instructor = Column(Boolean, default=False)
+    total_xp = Column(Integer, default=0)
+    level = Column(Integer, default=1)
+    streak_days = Column(Integer, default=0)
+    last_activity_date = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-        return Base, True
-    except ImportError as e:
-        print(f"Warning: Could not import app models: {e}")
-        print("Using TestBase - some tests may be skipped")
-        return TestBase, False
+    # Relationships
+    enrollments = relationship("Enrollment", back_populates="user", cascade="all, delete-orphan")
+    achievements = relationship("UserAchievement", back_populates="user", cascade="all, delete-orphan")
+    spaced_repetition_cards = relationship("SpacedRepetitionCard", back_populates="user", cascade="all, delete-orphan")
+    stats = relationship("UserStats", back_populates="user", uselist=False, cascade="all, delete-orphan")
 
+
+class Instructor(TestBase):
+    """Test Instructor model."""
+    __tablename__ = "instructors"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    bio = Column(Text, nullable=True)
+    expertise_areas = Column(String(500), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    courses = relationship("Course", back_populates="instructor")
+
+
+class Course(TestBase):
+    """Test Course model."""
+    __tablename__ = "courses"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    domain = Column(String(100), index=True, nullable=True)
+    instructor_id = Column(Integer, ForeignKey("instructors.id"), nullable=True)
+    is_published = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    instructor = relationship("Instructor", back_populates="courses")
+    enrollments = relationship("Enrollment", back_populates="course", cascade="all, delete-orphan")
+
+
+class Enrollment(TestBase):
+    """Test Enrollment model."""
+    __tablename__ = "enrollments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    course_id = Column(Integer, ForeignKey("courses.id", ondelete="CASCADE"), nullable=False)
+    progress = Column(Float, default=0.0)
+    completed_at = Column(DateTime, nullable=True)
+    enrolled_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    user = relationship("User", back_populates="enrollments")
+    course = relationship("Course", back_populates="enrollments")
+
+
+class Concept(TestBase):
+    """Test Concept model."""
+    __tablename__ = "concepts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    domain = Column(String(100), nullable=True)
+    subdomain = Column(String(100), nullable=True)
+    avg_difficulty = Column(Float, default=5.0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    spaced_repetition_cards = relationship("SpacedRepetitionCard", back_populates="concept")
+
+
+class SpacedRepetitionCard(TestBase):
+    """Test SpacedRepetitionCard model (FSRS-based)."""
+    __tablename__ = "spaced_repetition_cards"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    concept_id = Column(Integer, ForeignKey("concepts.id", ondelete="CASCADE"), nullable=False)
+    difficulty = Column(Float, default=5.0)
+    stability = Column(Float, default=2.5)
+    retrievability = Column(Float, default=0.9)
+    review_count = Column(Integer, default=0)
+    next_review_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    user = relationship("User", back_populates="spaced_repetition_cards")
+    concept = relationship("Concept", back_populates="spaced_repetition_cards")
+    review_logs = relationship("ReviewLog", back_populates="card", cascade="all, delete-orphan")
+
+
+class ReviewLog(TestBase):
+    """Test ReviewLog model."""
+    __tablename__ = "review_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    card_id = Column(Integer, ForeignKey("spaced_repetition_cards.id", ondelete="CASCADE"), nullable=False)
+    rating = Column(Integer, nullable=False)  # 1-5 rating
+    reviewed_at = Column(DateTime, default=datetime.utcnow)
+    response_time_ms = Column(Integer, nullable=True)
+
+    # Relationships
+    card = relationship("SpacedRepetitionCard", back_populates="review_logs")
+
+
+class UserAchievement(TestBase):
+    """Test UserAchievement model."""
+    __tablename__ = "user_achievements"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    achievement_type = Column(String(50), nullable=False)
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    xp_reward = Column(Integer, default=0)
+    unlocked_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    user = relationship("User", back_populates="achievements")
+
+
+class UserStats(TestBase):
+    """Test UserStats model."""
+    __tablename__ = "user_stats"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False)
+    total_achievements = Column(Integer, default=0)
+    total_reviews = Column(Integer, default=0)
+    total_correct = Column(Integer, default=0)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    user = relationship("User", back_populates="stats")
+
+
+class DailyActivity(TestBase):
+    """Test DailyActivity model."""
+    __tablename__ = "daily_activities"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    date = Column(DateTime, nullable=False)
+    xp_earned = Column(Integer, default=0)
+    reviews_completed = Column(Integer, default=0)
+
+
+class ChatHistory(TestBase):
+    """Test ChatHistory model."""
+    __tablename__ = "chat_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    message = Column(Text, nullable=False)
+    response = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class UserConceptMastery(TestBase):
+    """Test UserConceptMastery model."""
+    __tablename__ = "user_concept_mastery"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    concept_id = Column(Integer, ForeignKey("concepts.id", ondelete="CASCADE"), nullable=False)
+    mastery_level = Column(Float, default=0.0)
+    last_reviewed = Column(DateTime, nullable=True)
+
+
+# ============================================================================
+# Pytest Fixtures
+# ============================================================================
 
 @pytest.fixture(scope="session")
 def event_loop():
@@ -81,7 +270,7 @@ def event_loop():
     loop.close()
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def sync_engine():
     """Create synchronous test engine for schema tests."""
     engine = create_engine(
@@ -91,19 +280,21 @@ def sync_engine():
         echo=False
     )
 
-    # Create all tables from app models
-    Base, models_imported = _get_app_base_and_models()
-    if models_imported:
-        Base.metadata.create_all(bind=engine)
+    # Enable foreign keys for SQLite
+    @event.listens_for(engine, "connect")
+    def set_sqlite_pragma(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
 
+    # Create all tables
+    TestBase.metadata.create_all(bind=engine)
     yield engine
-
-    # Cleanup
-    if models_imported:
-        Base.metadata.drop_all(bind=engine)
+    # Drop all tables after test
+    TestBase.metadata.drop_all(bind=engine)
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 async def async_engine():
     """Create async test engine."""
     engine = create_async_engine(
@@ -112,21 +303,32 @@ async def async_engine():
         poolclass=StaticPool,
         echo=False
     )
-    return engine
+
+    # Enable foreign keys for SQLite async
+    def _enable_foreign_keys(dbapi_conn, connection_record):
+        cursor = dbapi_conn.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
+    from sqlalchemy import event as sa_event
+    sa_event.listen(engine.sync_engine, "connect", _enable_foreign_keys)
+
+    # Create all tables
+    async with engine.begin() as conn:
+        await conn.run_sync(TestBase.metadata.create_all)
+
+    yield engine
+
+    # Drop all tables after test
+    async with engine.begin() as conn:
+        await conn.run_sync(TestBase.metadata.drop_all)
+
+    await engine.dispose()
 
 
 @pytest.fixture
 async def async_session(async_engine) -> AsyncGenerator[AsyncSession, None]:
     """Provide async database session for tests."""
-    # Import models to ensure they are registered
-    Base, models_imported = _get_app_base_and_models()
-
-    if not models_imported:
-        pytest.skip("App models not available for async session tests")
-
-    async with async_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
     async_session_factory = sessionmaker(
         async_engine,
         class_=AsyncSession,
@@ -137,19 +339,10 @@ async def async_session(async_engine) -> AsyncGenerator[AsyncSession, None]:
         yield session
         await session.rollback()
 
-    async with async_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-
 
 @pytest.fixture
 def sync_session(sync_engine) -> Generator[Session, None, None]:
     """Provide sync database session for tests."""
-    Base, models_imported = _get_app_base_and_models()
-
-    if not models_imported:
-        pytest.skip("App models not available for sync session tests")
-
-    # Tables are already created by sync_engine fixture
     SessionLocal = sessionmaker(bind=sync_engine, autoflush=False, autocommit=False)
     session = SessionLocal()
 

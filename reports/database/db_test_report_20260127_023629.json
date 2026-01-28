@@ -1,0 +1,827 @@
+{
+  "run_id": "20260127_023629",
+  "timestamp": "2026-01-27T02:36:44.842059",
+  "duration": 14.967296,
+  "environment": {
+    "python_version": "Python 3.12.10",
+    "database": "sqlite+aiosqlite:///:memory:",
+    "os": "nt",
+    "timestamp": "2026-01-27T02:36:44.887016"
+  },
+  "summary": {
+    "total": 88,
+    "passed": 71,
+    "failed": 12,
+    "skipped": 5,
+    "errors": 0
+  },
+  "tests": [
+    {
+      "name": "test_create_user",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.018601799994939938,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:38.055658"
+    },
+    {
+      "name": "test_read_user_by_id",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.005507699999725446,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:38.102443"
+    },
+    {
+      "name": "test_read_user_by_email",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.0051420000090729445,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:38.147161"
+    },
+    {
+      "name": "test_update_user",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.007599600008688867,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:38.202031"
+    },
+    {
+      "name": "test_update_user_partial",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.007003699982305989,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:38.254111"
+    },
+    {
+      "name": "test_delete_user",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.006093100004363805,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:38.308646"
+    },
+    {
+      "name": "test_create_multiple_users",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.006085500004701316,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:38.377265"
+    },
+    {
+      "name": "test_create_course",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.0025622999819461256,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:38.422540"
+    },
+    {
+      "name": "test_read_courses_by_domain",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.007376499997917563,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:38.469393"
+    },
+    {
+      "name": "test_update_course_publish_status",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.006495100009487942,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:38.518189"
+    },
+    {
+      "name": "test_delete_course",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.0061190999986138195,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:38.569349"
+    },
+    {
+      "name": "test_create_enrollment",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.009677399997599423,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:38.623881"
+    },
+    {
+      "name": "test_update_enrollment_progress",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.0071724999870639294,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:38.673784"
+    },
+    {
+      "name": "test_complete_enrollment",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.008570800011511892,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:38.725035"
+    },
+    {
+      "name": "test_create_spaced_repetition_card",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.007310799992410466,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:38.771172"
+    },
+    {
+      "name": "test_update_fsrs_parameters",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.00957550000748597,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:38.823739"
+    },
+    {
+      "name": "test_create_review_log",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.007001099991612136,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:38.869075"
+    },
+    {
+      "name": "test_get_due_cards",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.007822399988071993,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:38.919751"
+    },
+    {
+      "name": "test_create_achievement",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.004524600022705272,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:38.962976"
+    },
+    {
+      "name": "test_get_user_achievements",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.006304600014118478,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:39.007319"
+    },
+    {
+      "name": "test_bulk_insert_users",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.06236390001140535,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:39.109303"
+    },
+    {
+      "name": "test_bulk_update",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.040346199995838106,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:39.205764"
+    },
+    {
+      "name": "test_bulk_delete",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.025171399989631027,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:39.276842"
+    },
+    {
+      "name": "test_duplicate_email_rejected",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.004227800003718585,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:39.324976"
+    },
+    {
+      "name": "test_duplicate_username_rejected",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.006446999992476776,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:39.372404"
+    },
+    {
+      "name": "test_case_sensitivity_email",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.0037635000189766288,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:39.427489"
+    },
+    {
+      "name": "test_user_email_required",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.0025966000102926046,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:39.474742"
+    },
+    {
+      "name": "test_user_username_required",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.0029341999907046556,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:39.524723"
+    },
+    {
+      "name": "test_user_password_required",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.004491700005019084,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:39.583710"
+    },
+    {
+      "name": "test_enrollment_requires_valid_user",
+      "category": "data_integrity",
+      "status": "failed",
+      "duration": 0.005158800020581111,
+      "message": "tests\\database\\test_data_integrity.py:149: in test_enrollment_requires_valid_user\n    with pytest.raises(IntegrityError):\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nE   Failed: DID NOT RAISE <class 'sqlalchemy.exc.IntegrityError'>",
+      "details": {},
+      "timestamp": "2026-01-27T02:36:39.639015"
+    },
+    {
+      "name": "test_enrollment_requires_valid_course",
+      "category": "data_integrity",
+      "status": "failed",
+      "duration": 0.004819399997359142,
+      "message": "tests\\database\\test_data_integrity.py:170: in test_enrollment_requires_valid_course\n    with pytest.raises(IntegrityError):\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nE   Failed: DID NOT RAISE <class 'sqlalchemy.exc.IntegrityError'>",
+      "details": {},
+      "timestamp": "2026-01-27T02:36:39.691022"
+    },
+    {
+      "name": "test_spaced_repetition_card_requires_valid_user",
+      "category": "data_integrity",
+      "status": "failed",
+      "duration": 0.004299399995943531,
+      "message": "tests\\database\\test_data_integrity.py:196: in test_spaced_repetition_card_requires_valid_user\n    with pytest.raises(IntegrityError):\n         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nE   Failed: DID NOT RAISE <class 'sqlalchemy.exc.IntegrityError'>",
+      "details": {},
+      "timestamp": "2026-01-27T02:36:39.739145"
+    },
+    {
+      "name": "test_user_xp_non_negative",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.0023979000106919557,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:39.779703"
+    },
+    {
+      "name": "test_user_level_positive",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.0023628000053577125,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:39.822281"
+    },
+    {
+      "name": "test_progress_percentage_range",
+      "category": "data_integrity",
+      "status": "skipped",
+      "duration": 0.004618999984813854,
+      "message": "('c:\\\\Users\\\\brock\\\\Documents\\\\NerdLearn\\\\NerdLearn\\\\tests\\\\database\\\\test_data_integrity.py', 259, 'Skipped: No DB constraint on progress range')",
+      "details": {},
+      "timestamp": "2026-01-27T02:36:39.864162"
+    },
+    {
+      "name": "test_fsrs_difficulty_range",
+      "category": "data_integrity",
+      "status": "skipped",
+      "duration": 0.0050091999873984605,
+      "message": "('c:\\\\Users\\\\brock\\\\Documents\\\\NerdLearn\\\\NerdLearn\\\\tests\\\\database\\\\test_data_integrity.py', 289, 'Skipped: No DB constraint on FSRS difficulty range')",
+      "details": {},
+      "timestamp": "2026-01-27T02:36:39.907267"
+    },
+    {
+      "name": "test_user_stats_matches_achievements",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.010252400010358542,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:39.955888"
+    },
+    {
+      "name": "test_review_log_timestamp_consistency",
+      "category": "data_integrity",
+      "status": "skipped",
+      "duration": 0.009652300010202453,
+      "message": "('c:\\\\Users\\\\brock\\\\Documents\\\\NerdLearn\\\\NerdLearn\\\\tests\\\\database\\\\test_data_integrity.py', 378, 'Skipped: No DB constraint preventing future review timestamps')",
+      "details": {},
+      "timestamp": "2026-01-27T02:36:40.007874"
+    },
+    {
+      "name": "test_empty_string_vs_null",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.06802639999659732,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:40.128191"
+    },
+    {
+      "name": "test_very_long_strings",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.004517099994700402,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:40.177356"
+    },
+    {
+      "name": "test_unicode_characters",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.0038247999909799546,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:40.225951"
+    },
+    {
+      "name": "test_timestamp_precision",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.004070599999977276,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:40.272596"
+    },
+    {
+      "name": "test_single_user_insert_time",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.014655300008598715,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:40.325635"
+    },
+    {
+      "name": "test_bulk_insert_100_users",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.06909069998073392,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:40.443520"
+    },
+    {
+      "name": "test_bulk_insert_1000_users",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.4560674999956973,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:40.952646"
+    },
+    {
+      "name": "test_single_user_select_by_id",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.06759459999739192,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:41.063255"
+    },
+    {
+      "name": "test_select_by_indexed_column",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.06422619998920709,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:41.170150"
+    },
+    {
+      "name": "test_bulk_select_all_users",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.04747829999541864,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:41.258674"
+    },
+    {
+      "name": "test_user_enrollment_join",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.12353419998544268,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:41.423862"
+    },
+    {
+      "name": "test_spaced_repetition_due_cards_query",
+      "category": "data_integrity",
+      "status": "failed",
+      "duration": 0.083724500000244,
+      "message": "tests\\database\\test_performance.py:333: in test_spaced_repetition_due_cards_query\n    .where(SpacedRepetitionCard.user_id == user.id)\n                                           ^^^^^^^\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\orm\\attributes.py:569: in __get__\n    return self.impl.get(state, dict_)  # type: ignore[no-any-return]\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\orm\\attributes.py:1096: in get\n    value = self._fire_loader_callables(state, key, passive)\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\orm\\attributes.py:1126: in _fire_loader_callables\n    return state._load_expired(state, passive)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\orm\\state.py:828: in _load_expired\n    self.manager.expired_attribute_loader(self, toload, passive)\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\orm\\loading.py:1674: in load_scalar_attributes\n    result = load_on_ident(\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\orm\\loading.py:510: in load_on_ident\n    return load_on_pk_identity(\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\orm\\loading.py:695: in load_on_pk_identity\n    session.execute(\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\orm\\session.py:2351: in execute\n    return self._execute_internal(\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\orm\\session.py:2249: in _execute_internal\n    result: Result[Any] = compile_state_cls.orm_execute_statement(\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\orm\\context.py:306: in orm_execute_statement\n    result = conn.execute(\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\engine\\base.py:1419: in execute\n    return meth(\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\sql\\elements.py:527: in _execute_on_connection\n    return connection._execute_clauseelement(\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\engine\\base.py:1641: in _execute_clauseelement\n    ret = self._execute_context(\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\engine\\base.py:1846: in _execute_context\n    return self._exec_single_context(\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\engine\\base.py:1986: in _exec_single_context\n    self._handle_dbapi_exception(\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\engine\\base.py:2366: in _handle_dbapi_exception\n    raise exc_info[1].with_traceback(exc_info[2])\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\engine\\base.py:1967: in _exec_single_context\n    self.dialect.do_execute(\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\engine\\default.py:952: in do_execute\n    cursor.execute(statement, parameters)\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\dialects\\sqlite\\aiosqlite.py:180: in execute\n    self._adapt_connection._handle_exception(error)\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\dialects\\sqlite\\aiosqlite.py:340: in _handle_exception\n    raise error\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\dialects\\sqlite\\aiosqlite.py:157: in execute\n    _cursor: AsyncIODBAPICursor = self.await_(self._connection.cursor())  # type: ignore[arg-type] # noqa: E501\n                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\util\\_concurrency_py3k.py:123: in await_only\n    raise exc.MissingGreenlet(\nE   sqlalchemy.exc.MissingGreenlet: greenlet_spawn has not been called; can't call await_only() here. Was IO attempted in an unexpected place? (Background on this error at: https://sqlalche.me/e/20/xd2s)",
+      "details": {},
+      "timestamp": "2026-01-27T02:36:42.054665"
+    },
+    {
+      "name": "test_aggregate_user_statistics",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.056075200001941994,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:42.151791"
+    },
+    {
+      "name": "test_leaderboard_query",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.2734585999860428,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:42.486568"
+    },
+    {
+      "name": "test_email_index_scan_vs_full_scan",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.2618635999970138,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:42.793005"
+    },
+    {
+      "name": "test_commit_frequency_impact",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.2505741000059061,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:43.102310"
+    },
+    {
+      "name": "test_user_has_enrollments",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.011087400023825467,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:43.153256"
+    },
+    {
+      "name": "test_user_has_achievements",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.009031299996422604,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:43.205706"
+    },
+    {
+      "name": "test_user_has_spaced_repetition_cards",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.017254000005777925,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:43.264005"
+    },
+    {
+      "name": "test_course_has_enrollments",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.016240600001765415,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:43.322855"
+    },
+    {
+      "name": "test_course_has_instructor",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.011061099998187274,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:43.382255"
+    },
+    {
+      "name": "test_delete_user_cascades_to_enrollments",
+      "category": "data_integrity",
+      "status": "failed",
+      "duration": 0.008865499985404313,
+      "message": "tests\\database\\test_relationships.py:216: in test_delete_user_cascades_to_enrollments\n    assert deleted_enrollment is None\nE   assert <tests.database.conftest.Enrollment object at 0x000001FAFE9D6BD0> is None",
+      "details": {},
+      "timestamp": "2026-01-27T02:36:43.503268"
+    },
+    {
+      "name": "test_delete_user_cascades_to_achievements",
+      "category": "data_integrity",
+      "status": "failed",
+      "duration": 0.007535999990068376,
+      "message": "tests\\database\\test_relationships.py:251: in test_delete_user_cascades_to_achievements\n    assert deleted_achievement is None\nE   assert <tests.database.conftest.UserAchievement object at 0x000001FAFE9D74D0> is None",
+      "details": {},
+      "timestamp": "2026-01-27T02:36:43.560041"
+    },
+    {
+      "name": "test_delete_user_cascades_to_spaced_repetition",
+      "category": "data_integrity",
+      "status": "failed",
+      "duration": 0.011269399983575568,
+      "message": "tests\\database\\test_relationships.py:297: in test_delete_user_cascades_to_spaced_repetition\n    assert result.scalar_one_or_none() is None\nE   assert <tests.database.conftest.SpacedRepetitionCard object at 0x000001FAFFC8B620> is None\nE    +  where <tests.database.conftest.SpacedRepetitionCard object at 0x000001FAFFC8B620> = scalar_one_or_none()\nE    +    where scalar_one_or_none = <sqlalchemy.engine.result.ChunkedIteratorResult object at 0x000001FAFFD648D0>.scalar_one_or_none",
+      "details": {},
+      "timestamp": "2026-01-27T02:36:43.623104"
+    },
+    {
+      "name": "test_delete_course_cascades_to_enrollments",
+      "category": "data_integrity",
+      "status": "failed",
+      "duration": 0.010313100006897002,
+      "message": "tests\\database\\test_relationships.py:337: in test_delete_course_cascades_to_enrollments\n    assert len(remaining_enrollments) == 0\nE   assert 3 == 0\nE    +  where 3 = len([<tests.database.conftest.Enrollment object at 0x000001FA823CE5A0>, <tests.database.conftest.Enrollment object at 0x000001FA823CEAB0>, <tests.database.conftest.Enrollment object at 0x000001FAFFC041A0>])",
+      "details": {},
+      "timestamp": "2026-01-27T02:36:43.686574"
+    },
+    {
+      "name": "test_delete_card_cascades_to_review_logs",
+      "category": "data_integrity",
+      "status": "failed",
+      "duration": 0.01129709999077022,
+      "message": "tests\\database\\test_relationships.py:388: in test_delete_card_cascades_to_review_logs\n    assert len(remaining_logs) == 0\nE   assert 4 == 0\nE    +  where 4 = len([<tests.database.conftest.ReviewLog object at 0x000001FAFFC04C80>, <tests.database.conftest.ReviewLog object at 0x000001FA823D22A0>, <tests.database.conftest.ReviewLog object at 0x000001FA823D18B0>, <tests.database.conftest.ReviewLog object at 0x000001FA823D2450>])",
+      "details": {},
+      "timestamp": "2026-01-27T02:36:43.749362"
+    },
+    {
+      "name": "test_delete_enrollment_preserves_user",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.006478399998741224,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:43.796861"
+    },
+    {
+      "name": "test_delete_enrollment_preserves_course",
+      "category": "data_integrity",
+      "status": "passed",
+      "duration": 0.006506900012027472,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:43.860001"
+    },
+    {
+      "name": "test_eager_load_enrollments",
+      "category": "data_integrity",
+      "status": "failed",
+      "duration": 0.011818600003607571,
+      "message": "tests\\database\\test_relationships.py:482: in test_eager_load_enrollments\n    .where(User.id == user.id)\n                      ^^^^^^^\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\orm\\attributes.py:569: in __get__\n    return self.impl.get(state, dict_)  # type: ignore[no-any-return]\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\orm\\attributes.py:1096: in get\n    value = self._fire_loader_callables(state, key, passive)\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\orm\\attributes.py:1126: in _fire_loader_callables\n    return state._load_expired(state, passive)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\orm\\state.py:828: in _load_expired\n    self.manager.expired_attribute_loader(self, toload, passive)\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\orm\\loading.py:1674: in load_scalar_attributes\n    result = load_on_ident(\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\orm\\loading.py:510: in load_on_ident\n    return load_on_pk_identity(\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\orm\\loading.py:695: in load_on_pk_identity\n    session.execute(\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\orm\\session.py:2351: in execute\n    return self._execute_internal(\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\orm\\session.py:2249: in _execute_internal\n    result: Result[Any] = compile_state_cls.orm_execute_statement(\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\orm\\context.py:306: in orm_execute_statement\n    result = conn.execute(\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\engine\\base.py:1419: in execute\n    return meth(\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\sql\\elements.py:527: in _execute_on_connection\n    return connection._execute_clauseelement(\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\engine\\base.py:1641: in _execute_clauseelement\n    ret = self._execute_context(\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\engine\\base.py:1846: in _execute_context\n    return self._exec_single_context(\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\engine\\base.py:1986: in _exec_single_context\n    self._handle_dbapi_exception(\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\engine\\base.py:2366: in _handle_dbapi_exception\n    raise exc_info[1].with_traceback(exc_info[2])\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\engine\\base.py:1967: in _exec_single_context\n    self.dialect.do_execute(\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\engine\\default.py:952: in do_execute\n    cursor.execute(statement, parameters)\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\dialects\\sqlite\\aiosqlite.py:180: in execute\n    self._adapt_connection._handle_exception(error)\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\dialects\\sqlite\\aiosqlite.py:340: in _handle_exception\n    raise error\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\dialects\\sqlite\\aiosqlite.py:157: in execute\n    _cursor: AsyncIODBAPICursor = self.await_(self._connection.cursor())  # type: ignore[arg-type] # noqa: E501\n                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\util\\_concurrency_py3k.py:123: in await_only\n    raise exc.MissingGreenlet(\nE   sqlalchemy.exc.MissingGreenlet: greenlet_spawn has not been called; can't call await_only() here. Was IO attempted in an unexpected place? (Background on this error at: https://sqlalche.me/e/20/xd2s)",
+      "details": {},
+      "timestamp": "2026-01-27T02:36:44.222275"
+    },
+    {
+      "name": "test_nested_relationship_loading",
+      "category": "data_integrity",
+      "status": "failed",
+      "duration": 0.00968240000656806,
+      "message": "tests\\database\\test_relationships.py:533: in test_nested_relationship_loading\n    .where(User.id == user.id)\n                      ^^^^^^^\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\orm\\attributes.py:569: in __get__\n    return self.impl.get(state, dict_)  # type: ignore[no-any-return]\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\orm\\attributes.py:1096: in get\n    value = self._fire_loader_callables(state, key, passive)\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\orm\\attributes.py:1126: in _fire_loader_callables\n    return state._load_expired(state, passive)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\orm\\state.py:828: in _load_expired\n    self.manager.expired_attribute_loader(self, toload, passive)\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\orm\\loading.py:1674: in load_scalar_attributes\n    result = load_on_ident(\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\orm\\loading.py:510: in load_on_ident\n    return load_on_pk_identity(\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\orm\\loading.py:695: in load_on_pk_identity\n    session.execute(\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\orm\\session.py:2351: in execute\n    return self._execute_internal(\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\orm\\session.py:2249: in _execute_internal\n    result: Result[Any] = compile_state_cls.orm_execute_statement(\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\orm\\context.py:306: in orm_execute_statement\n    result = conn.execute(\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\engine\\base.py:1419: in execute\n    return meth(\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\sql\\elements.py:527: in _execute_on_connection\n    return connection._execute_clauseelement(\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\engine\\base.py:1641: in _execute_clauseelement\n    ret = self._execute_context(\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\engine\\base.py:1846: in _execute_context\n    return self._exec_single_context(\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\engine\\base.py:1986: in _exec_single_context\n    self._handle_dbapi_exception(\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\engine\\base.py:2366: in _handle_dbapi_exception\n    raise exc_info[1].with_traceback(exc_info[2])\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\engine\\base.py:1967: in _exec_single_context\n    self.dialect.do_execute(\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\engine\\default.py:952: in do_execute\n    cursor.execute(statement, parameters)\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\dialects\\sqlite\\aiosqlite.py:180: in execute\n    self._adapt_connection._handle_exception(error)\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\dialects\\sqlite\\aiosqlite.py:340: in _handle_exception\n    raise error\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\dialects\\sqlite\\aiosqlite.py:157: in execute\n    _cursor: AsyncIODBAPICursor = self.await_(self._connection.cursor())  # type: ignore[arg-type] # noqa: E501\n                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n..\\..\\..\\AppData\\Roaming\\Python\\Python312\\site-packages\\sqlalchemy\\util\\_concurrency_py3k.py:123: in await_only\n    raise exc.MissingGreenlet(\nE   sqlalchemy.exc.MissingGreenlet: greenlet_spawn has not been called; can't call await_only() here. Was IO attempted in an unexpected place? (Background on this error at: https://sqlalche.me/e/20/xd2s)",
+      "details": {},
+      "timestamp": "2026-01-27T02:36:44.605820"
+    },
+    {
+      "name": "test_all_required_tables_exist",
+      "category": "schema_integrity",
+      "status": "passed",
+      "duration": 0.0007532000017818063,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:44.631390"
+    },
+    {
+      "name": "test_no_orphan_tables",
+      "category": "schema_integrity",
+      "status": "passed",
+      "duration": 0.0006428000051528215,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:44.641718"
+    },
+    {
+      "name": "test_user_table_columns",
+      "category": "schema_integrity",
+      "status": "passed",
+      "duration": 0.0012559000169858336,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:44.655831"
+    },
+    {
+      "name": "test_user_email_is_unique",
+      "category": "schema_integrity",
+      "status": "passed",
+      "duration": 0.0027057999977841973,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:44.667899"
+    },
+    {
+      "name": "test_user_username_is_unique",
+      "category": "schema_integrity",
+      "status": "passed",
+      "duration": 0.0008671999967191368,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:44.677322"
+    },
+    {
+      "name": "test_user_email_not_nullable",
+      "category": "schema_integrity",
+      "status": "passed",
+      "duration": 0.0006776999798603356,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:44.691098"
+    },
+    {
+      "name": "test_user_default_values",
+      "category": "schema_integrity",
+      "status": "failed",
+      "duration": 0.0012241000076755881,
+      "message": "tests\\database\\test_schema_integrity.py:126: in test_user_default_values\n    assert columns[\"is_active\"].get(\"default\") is not None, \\\nE   AssertionError: users.is_active should have a default\nE   assert None is not None\nE    +  where None = <built-in method get of dict object at 0x000001FA824C9CC0>('default')\nE    +    where <built-in method get of dict object at 0x000001FA824C9CC0> = {'name': 'is_active', 'type': BOOLEAN(), 'nullable': True, 'default': None, 'primary_key': 0}.get",
+      "details": {},
+      "timestamp": "2026-01-27T02:36:44.705530"
+    },
+    {
+      "name": "test_course_table_columns",
+      "category": "schema_integrity",
+      "status": "passed",
+      "duration": 0.0010763000173028558,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:44.716441"
+    },
+    {
+      "name": "test_concept_table_columns",
+      "category": "schema_integrity",
+      "status": "passed",
+      "duration": 0.0005693999992217869,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:44.725776"
+    },
+    {
+      "name": "test_spaced_repetition_card_columns",
+      "category": "schema_integrity",
+      "status": "passed",
+      "duration": 0.00045689998660236597,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:44.734892"
+    },
+    {
+      "name": "test_review_log_columns",
+      "category": "schema_integrity",
+      "status": "passed",
+      "duration": 0.0005558000120799989,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:44.743662"
+    },
+    {
+      "name": "test_users_email_index",
+      "category": "schema_integrity",
+      "status": "passed",
+      "duration": 0.0006746999861206859,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:44.752765"
+    },
+    {
+      "name": "test_users_username_index",
+      "category": "schema_integrity",
+      "status": "passed",
+      "duration": 0.0008308000105898827,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:44.765819"
+    },
+    {
+      "name": "test_courses_domain_index",
+      "category": "schema_integrity",
+      "status": "passed",
+      "duration": 0.0005142999871168286,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:44.775251"
+    },
+    {
+      "name": "test_enrollment_user_fk",
+      "category": "schema_integrity",
+      "status": "passed",
+      "duration": 0.002732499997364357,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:44.787336"
+    },
+    {
+      "name": "test_enrollment_course_fk",
+      "category": "schema_integrity",
+      "status": "passed",
+      "duration": 0.0006150999979581684,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:44.797024"
+    },
+    {
+      "name": "test_spaced_repetition_card_user_fk",
+      "category": "schema_integrity",
+      "status": "passed",
+      "duration": 0.0006260000227484852,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:44.807685"
+    },
+    {
+      "name": "test_review_log_card_fk",
+      "category": "schema_integrity",
+      "status": "passed",
+      "duration": 0.0005873999907635152,
+      "message": null,
+      "details": {},
+      "timestamp": "2026-01-27T02:36:44.820247"
+    },
+    {
+      "name": "test_alembic_version_table_exists",
+      "category": "schema_integrity",
+      "status": "skipped",
+      "duration": 0.00048600000445730984,
+      "message": "('c:\\\\Users\\\\brock\\\\Documents\\\\NerdLearn\\\\NerdLearn\\\\tests\\\\database\\\\test_schema_integrity.py', 304, 'Skipped: alembic_version table not present (may be using fresh schema)')",
+      "details": {},
+      "timestamp": "2026-01-27T02:36:44.829661"
+    },
+    {
+      "name": "test_schema_is_up_to_date",
+      "category": "schema_integrity",
+      "status": "skipped",
+      "duration": 0.00046629999997094274,
+      "message": "('c:\\\\Users\\\\brock\\\\Documents\\\\NerdLearn\\\\NerdLearn\\\\tests\\\\database\\\\test_schema_integrity.py', 312, 'Skipped: Not using Alembic migrations')",
+      "details": {},
+      "timestamp": "2026-01-27T02:36:44.839043"
+    }
+  ],
+  "benchmarks": [],
+  "categories": {
+    "data_integrity": {
+      "total": 68,
+      "passed": 54,
+      "failed": 11,
+      "skipped": 3
+    },
+    "schema_integrity": {
+      "total": 20,
+      "passed": 17,
+      "failed": 1,
+      "skipped": 2
+    }
+  }
+}

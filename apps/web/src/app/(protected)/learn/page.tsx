@@ -16,6 +16,7 @@ import { ChatInterface } from '@/components/chat/chat-interface'
 import { KnowledgeGraphView } from '@/components/analytics/KnowledgeGraphView'
 import { useGraphData } from '@/hooks/use-graph-data'
 import { XPGainNotification } from '@/components/learning/XPGainNotification'
+import { TestingPanel } from '@/components/testing/TestingPanel'
 
 interface SessionState {
   session_id: string
@@ -263,6 +264,7 @@ export default function LearnPage() {
               <SidebarTabs
                 chatContent={<ChatInterface className="h-full w-full border-none shadow-none rounded-none" />}
                 graphContent={<div className="h-full w-full overflow-hidden flex flex-col"><KnowledgeGraphView data={graphData} height={600} /></div>}
+                testingContent={<TestingPanel />}
                 progressContent={
                   <div className="space-y-6">
                     {/* Engagement Meter */}

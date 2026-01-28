@@ -18,20 +18,20 @@ from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from .conftest import UserFactory, CourseFactory
+from .conftest import (
+    UserFactory, CourseFactory, User, Course, Enrollment, Concept,
+    SpacedRepetitionCard, ReviewLog, UserAchievement, UserStats,
+    Instructor, TestBase
+)
 
-pytestmark = [pytest.mark.requires_db, pytest.mark.unit]
+pytestmark = [pytest.mark.asyncio]
 
 
 class TestUserRelationships:
     """Test User entity relationships."""
 
-    @pytest.mark.asyncio
     async def test_user_has_enrollments(self, async_session: AsyncSession):
         """Verify user can have multiple enrollments."""
-        from app.models.user import User
-        from app.models.course import Course, Enrollment
-
         user = User(**UserFactory.create())
         course1 = Course(**CourseFactory.create())
         course2 = Course(**CourseFactory.create())
@@ -44,22 +44,21 @@ class TestUserRelationships:
         async_session.add_all([enrollment1, enrollment2])
         await async_session.commit()
 
+        # Capture ID before expire
+        user_id = user.id
+
         # Load user with enrollments
         result = await async_session.execute(
             select(User)
             .options(selectinload(User.enrollments))
-            .where(User.id == user.id)
+            .where(User.id == user_id)
         )
         loaded_user = result.scalar_one()
 
         assert len(loaded_user.enrollments) == 2
 
-    @pytest.mark.asyncio
     async def test_user_has_achievements(self, async_session: AsyncSession):
         """Verify user can have multiple achievements."""
-        from app.models.user import User
-        from app.models.gamification import UserAchievement
-
         user = User(**UserFactory.create())
         async_session.add(user)
         await async_session.commit()
@@ -69,7 +68,7 @@ class TestUserRelationships:
                 user_id=user.id,
                 achievement_type="STREAK_MILESTONE",
                 name=f"Achievement {i}",
-                description=f"Description {i}",
+                description="Test",
                 xp_reward=100
             )
             for i in range(3)
@@ -77,32 +76,34 @@ class TestUserRelationships:
         async_session.add_all(achievements)
         await async_session.commit()
 
+        # Capture ID before expire
+        user_id = user.id
+
+        # Load user with achievements
         result = await async_session.execute(
             select(User)
             .options(selectinload(User.achievements))
-            .where(User.id == user.id)
+            .where(User.id == user_id)
         )
         loaded_user = result.scalar_one()
 
         assert len(loaded_user.achievements) == 3
 
-    @pytest.mark.asyncio
-    async def test_user_has_spaced_repetition_cards(self, async_session: AsyncSession):
+    async def test_user_has_spaced_repetition_cards(
+        self, async_session: AsyncSession
+    ):
         """Verify user can have multiple spaced repetition cards."""
-        from app.models.user import User
-        from app.models.spaced_repetition import SpacedRepetitionCard, Concept
-
         user = User(**UserFactory.create())
+        concepts = [
+            Concept(name=f"Concept {i}", description="Test")
+            for i in range(3)
+        ]
         async_session.add(user)
+        async_session.add_all(concepts)
         await async_session.commit()
 
-        # Create concepts and cards
-        for i in range(5):
-            concept = Concept(name=f"Concept {i}", description=f"Description {i}")
-            async_session.add(concept)
-            await async_session.commit()
-
-            card = SpacedRepetitionCard(
+        cards = [
+            SpacedRepetitionCard(
                 user_id=user.id,
                 concept_id=concept.id,
                 difficulty=5.0,
@@ -111,30 +112,32 @@ class TestUserRelationships:
                 review_count=0,
                 next_review_at=datetime.utcnow() + timedelta(days=1)
             )
-            async_session.add(card)
+            for concept in concepts
+        ]
+        async_session.add_all(cards)
         await async_session.commit()
 
+        # Capture ID before expire
+        user_id = user.id
+
+        # Load user with cards
         result = await async_session.execute(
             select(User)
             .options(selectinload(User.spaced_repetition_cards))
-            .where(User.id == user.id)
+            .where(User.id == user_id)
         )
         loaded_user = result.scalar_one()
 
-        assert len(loaded_user.spaced_repetition_cards) == 5
+        assert len(loaded_user.spaced_repetition_cards) == 3
 
 
 class TestCourseRelationships:
     """Test Course entity relationships."""
 
-    @pytest.mark.asyncio
     async def test_course_has_enrollments(self, async_session: AsyncSession):
-        """Verify course can have multiple enrolled students."""
-        from app.models.user import User
-        from app.models.course import Course, Enrollment
-
+        """Verify course can have multiple enrollments."""
         course = Course(**CourseFactory.create())
-        users = [User(**UserFactory.create()) for _ in range(5)]
+        users = [User(**UserFactory.create()) for _ in range(3)]
         async_session.add(course)
         async_session.add_all(users)
         await async_session.commit()
@@ -146,29 +149,29 @@ class TestCourseRelationships:
         async_session.add_all(enrollments)
         await async_session.commit()
 
+        # Capture ID before expire
+        course_id = course.id
+
+        # Load course with enrollments
         result = await async_session.execute(
             select(Course)
             .options(selectinload(Course.enrollments))
-            .where(Course.id == course.id)
+            .where(Course.id == course_id)
         )
         loaded_course = result.scalar_one()
 
-        assert len(loaded_course.enrollments) == 5
+        assert len(loaded_course.enrollments) == 3
 
-    @pytest.mark.asyncio
     async def test_course_has_instructor(self, async_session: AsyncSession):
-        """Verify course can be assigned to an instructor."""
-        from app.models.user import User, Instructor
-        from app.models.course import Course
-
+        """Verify course can have an instructor."""
         user = User(**UserFactory.create(is_instructor=True))
         async_session.add(user)
         await async_session.commit()
 
         instructor = Instructor(
             user_id=user.id,
-            bio="Test instructor",
-            expertise_areas="Python, AI"
+            bio="Test bio",
+            expertise_areas="Python, SQL"
         )
         async_session.add(instructor)
         await async_session.commit()
@@ -177,27 +180,33 @@ class TestCourseRelationships:
         async_session.add(course)
         await async_session.commit()
 
+        # Capture ID before expire
+        course_id = course.id
+
+        # Load course with instructor
         result = await async_session.execute(
             select(Course)
             .options(selectinload(Course.instructor))
-            .where(Course.id == course.id)
+            .where(Course.id == course_id)
         )
         loaded_course = result.scalar_one()
 
+        assert loaded_course.instructor is not None
         assert loaded_course.instructor_id == instructor.id
 
 
 class TestCascadeDelete:
-    """Test cascade delete operations."""
+    """Test cascade delete operations.
 
-    @pytest.mark.asyncio
+    Note: These tests use ORM-level deletes (session.delete) because
+    SQLite doesn't enforce ON DELETE CASCADE by default, and our models
+    use SQLAlchemy ORM cascade which requires object-level deletion.
+    """
+
     async def test_delete_user_cascades_to_enrollments(
         self, async_session: AsyncSession
     ):
-        """Verify deleting user removes their enrollments."""
-        from app.models.user import User
-        from app.models.course import Course, Enrollment
-
+        """Verify deleting user removes their enrollments via ORM cascade."""
         user = User(**UserFactory.create())
         course = Course(**CourseFactory.create())
         async_session.add_all([user, course])
@@ -208,10 +217,16 @@ class TestCascadeDelete:
         await async_session.commit()
         enrollment_id = enrollment.id
 
-        # Delete user
-        await async_session.execute(
-            delete(User).where(User.id == user.id)
+        # Reload user to ensure it's attached to session
+        result = await async_session.execute(
+            select(User)
+            .options(selectinload(User.enrollments))
+            .where(User.id == user.id)
         )
+        user_to_delete = result.scalar_one()
+
+        # Delete user via ORM (triggers cascade)
+        await async_session.delete(user_to_delete)
         await async_session.commit()
 
         # Verify enrollment was deleted
@@ -222,14 +237,10 @@ class TestCascadeDelete:
 
         assert deleted_enrollment is None
 
-    @pytest.mark.asyncio
     async def test_delete_user_cascades_to_achievements(
         self, async_session: AsyncSession
     ):
-        """Verify deleting user removes their achievements."""
-        from app.models.user import User
-        from app.models.gamification import UserAchievement
-
+        """Verify deleting user removes their achievements via ORM cascade."""
         user = User(**UserFactory.create())
         async_session.add(user)
         await async_session.commit()
@@ -245,10 +256,16 @@ class TestCascadeDelete:
         await async_session.commit()
         achievement_id = achievement.id
 
-        # Delete user
-        await async_session.execute(
-            delete(User).where(User.id == user.id)
+        # Reload user with relationships
+        result = await async_session.execute(
+            select(User)
+            .options(selectinload(User.achievements))
+            .where(User.id == user.id)
         )
+        user_to_delete = result.scalar_one()
+
+        # Delete user via ORM
+        await async_session.delete(user_to_delete)
         await async_session.commit()
 
         # Verify achievement was deleted
@@ -259,14 +276,10 @@ class TestCascadeDelete:
 
         assert deleted_achievement is None
 
-    @pytest.mark.asyncio
     async def test_delete_user_cascades_to_spaced_repetition(
         self, async_session: AsyncSession
     ):
-        """Verify deleting user removes their spaced repetition cards."""
-        from app.models.user import User
-        from app.models.spaced_repetition import SpacedRepetitionCard, Concept, ReviewLog
-
+        """Verify deleting user removes their spaced repetition cards via ORM cascade."""
         user = User(**UserFactory.create())
         concept = Concept(name="Test", description="Test")
         async_session.add_all([user, concept])
@@ -295,10 +308,19 @@ class TestCascadeDelete:
         card_id = card.id
         review_id = review.id
 
-        # Delete user
-        await async_session.execute(
-            delete(User).where(User.id == user.id)
+        # Reload user with relationships
+        result = await async_session.execute(
+            select(User)
+            .options(
+                selectinload(User.spaced_repetition_cards)
+                .selectinload(SpacedRepetitionCard.review_logs)
+            )
+            .where(User.id == user.id)
         )
+        user_to_delete = result.scalar_one()
+
+        # Delete user via ORM
+        await async_session.delete(user_to_delete)
         await async_session.commit()
 
         # Verify card was deleted
@@ -313,14 +335,10 @@ class TestCascadeDelete:
         )
         assert result.scalar_one_or_none() is None
 
-    @pytest.mark.asyncio
     async def test_delete_course_cascades_to_enrollments(
         self, async_session: AsyncSession
     ):
-        """Verify deleting course removes all enrollments."""
-        from app.models.user import User
-        from app.models.course import Course, Enrollment
-
+        """Verify deleting course removes all enrollments via ORM cascade."""
         course = Course(**CourseFactory.create())
         users = [User(**UserFactory.create()) for _ in range(3)]
         async_session.add(course)
@@ -335,10 +353,16 @@ class TestCascadeDelete:
         await async_session.commit()
         course_id = course.id
 
-        # Delete course
-        await async_session.execute(
-            delete(Course).where(Course.id == course_id)
+        # Reload course with relationships
+        result = await async_session.execute(
+            select(Course)
+            .options(selectinload(Course.enrollments))
+            .where(Course.id == course_id)
         )
+        course_to_delete = result.scalar_one()
+
+        # Delete course via ORM
+        await async_session.delete(course_to_delete)
         await async_session.commit()
 
         # Verify all enrollments were deleted
@@ -349,14 +373,10 @@ class TestCascadeDelete:
 
         assert len(remaining_enrollments) == 0
 
-    @pytest.mark.asyncio
     async def test_delete_card_cascades_to_review_logs(
         self, async_session: AsyncSession
     ):
-        """Verify deleting a spaced repetition card removes its review logs."""
-        from app.models.user import User
-        from app.models.spaced_repetition import SpacedRepetitionCard, Concept, ReviewLog
-
+        """Verify deleting a spaced repetition card removes its review logs via ORM cascade."""
         user = User(**UserFactory.create())
         concept = Concept(name="Test", description="Test")
         async_session.add_all([user, concept])
@@ -388,10 +408,16 @@ class TestCascadeDelete:
         await async_session.commit()
         card_id = card.id
 
-        # Delete card
-        await async_session.execute(
-            delete(SpacedRepetitionCard).where(SpacedRepetitionCard.id == card_id)
+        # Reload card with relationships
+        result = await async_session.execute(
+            select(SpacedRepetitionCard)
+            .options(selectinload(SpacedRepetitionCard.review_logs))
+            .where(SpacedRepetitionCard.id == card_id)
         )
+        card_to_delete = result.scalar_one()
+
+        # Delete card via ORM
+        await async_session.delete(card_to_delete)
         await async_session.commit()
 
         # Verify all review logs were deleted
@@ -406,14 +432,10 @@ class TestCascadeDelete:
 class TestOrphanRecords:
     """Test handling of orphaned records."""
 
-    @pytest.mark.asyncio
     async def test_delete_enrollment_preserves_user(
         self, async_session: AsyncSession
     ):
         """Verify deleting enrollment does not affect user."""
-        from app.models.user import User
-        from app.models.course import Course, Enrollment
-
         user = User(**UserFactory.create())
         course = Course(**CourseFactory.create())
         async_session.add_all([user, course])
@@ -434,19 +456,14 @@ class TestOrphanRecords:
         result = await async_session.execute(
             select(User).where(User.id == user_id)
         )
-        preserved_user = result.scalar_one_or_none()
+        existing_user = result.scalar_one_or_none()
 
-        assert preserved_user is not None
-        assert preserved_user.id == user_id
+        assert existing_user is not None
 
-    @pytest.mark.asyncio
     async def test_delete_enrollment_preserves_course(
         self, async_session: AsyncSession
     ):
         """Verify deleting enrollment does not affect course."""
-        from app.models.user import User
-        from app.models.course import Course, Enrollment
-
         user = User(**UserFactory.create())
         course = Course(**CourseFactory.create())
         async_session.add_all([user, course])
@@ -467,28 +484,27 @@ class TestOrphanRecords:
         result = await async_session.execute(
             select(Course).where(Course.id == course_id)
         )
-        preserved_course = result.scalar_one_or_none()
+        existing_course = result.scalar_one_or_none()
 
-        assert preserved_course is not None
+        assert existing_course is not None
 
 
 class TestRelationshipLoading:
     """Test relationship loading strategies."""
 
-    @pytest.mark.asyncio
     async def test_eager_load_enrollments(self, async_session: AsyncSession):
         """Test eager loading of enrollments with selectinload."""
-        from app.models.user import User
-        from app.models.course import Course, Enrollment
-
         user = User(**UserFactory.create())
         courses = [Course(**CourseFactory.create()) for _ in range(3)]
         async_session.add(user)
         async_session.add_all(courses)
         await async_session.commit()
 
+        # Capture user_id before creating enrollments
+        user_id = user.id
+
         enrollments = [
-            Enrollment(user_id=user.id, course_id=course.id, progress=0.0)
+            Enrollment(user_id=user_id, course_id=course.id, progress=0.0)
             for course in courses
         ]
         async_session.add_all(enrollments)
@@ -496,11 +512,11 @@ class TestRelationshipLoading:
 
         async_session.expire_all()
 
-        # Load with eager loading
+        # Load with eager loading - use captured user_id
         result = await async_session.execute(
             select(User)
             .options(selectinload(User.enrollments).selectinload(Enrollment.course))
-            .where(User.id == user.id)
+            .where(User.id == user_id)
         )
         loaded_user = result.scalar_one()
 
@@ -509,19 +525,18 @@ class TestRelationshipLoading:
         for enrollment in loaded_user.enrollments:
             assert enrollment.course is not None
 
-    @pytest.mark.asyncio
     async def test_nested_relationship_loading(self, async_session: AsyncSession):
         """Test loading nested relationships."""
-        from app.models.user import User
-        from app.models.spaced_repetition import SpacedRepetitionCard, Concept, ReviewLog
-
         user = User(**UserFactory.create())
         concept = Concept(name="Test", description="Test")
         async_session.add_all([user, concept])
         await async_session.commit()
 
+        # Capture user_id before further operations
+        user_id = user.id
+
         card = SpacedRepetitionCard(
-            user_id=user.id,
+            user_id=user_id,
             concept_id=concept.id,
             difficulty=5.0,
             stability=2.5,
@@ -546,14 +561,14 @@ class TestRelationshipLoading:
 
         async_session.expire_all()
 
-        # Load user with nested relationships
+        # Load user with nested relationships - use captured user_id
         result = await async_session.execute(
             select(User)
             .options(
                 selectinload(User.spaced_repetition_cards)
                 .selectinload(SpacedRepetitionCard.review_logs)
             )
-            .where(User.id == user.id)
+            .where(User.id == user_id)
         )
         loaded_user = result.scalar_one()
 

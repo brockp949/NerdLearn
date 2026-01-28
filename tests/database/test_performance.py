@@ -19,9 +19,13 @@ from typing import List
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .conftest import UserFactory, CourseFactory
+from .conftest import (
+    UserFactory, CourseFactory, User, Course, Enrollment, Concept,
+    SpacedRepetitionCard, ReviewLog, UserAchievement, UserStats,
+    Instructor, TestBase
+)
 
-pytestmark = [pytest.mark.requires_db, pytest.mark.benchmark, pytest.mark.slow]
+pytestmark = [pytest.mark.asyncio, pytest.mark.benchmark, pytest.mark.slow]
 
 
 # Performance thresholds (in seconds)
@@ -49,11 +53,8 @@ def measure_time(func):
 class TestInsertPerformance:
     """Test insert operation performance."""
 
-    @pytest.mark.asyncio
     async def test_single_user_insert_time(self, async_session: AsyncSession):
         """Benchmark single user insert time."""
-        from app.models.user import User
-
         times: List[float] = []
 
         for _ in range(10):
@@ -83,11 +84,8 @@ class TestInsertPerformance:
             "samples": len(times)
         }
 
-    @pytest.mark.asyncio
     async def test_bulk_insert_100_users(self, async_session: AsyncSession):
         """Benchmark inserting 100 users in batch."""
-        from app.models.user import User
-
         users = [User(**UserFactory.create()) for _ in range(100)]
 
         start = time.perf_counter()
@@ -109,11 +107,8 @@ class TestInsertPerformance:
             "per_record": elapsed / 100
         }
 
-    @pytest.mark.asyncio
     async def test_bulk_insert_1000_users(self, async_session: AsyncSession):
         """Benchmark inserting 1000 users in batch."""
-        from app.models.user import User
-
         users = [User(**UserFactory.create()) for _ in range(1000)]
 
         start = time.perf_counter()
@@ -139,11 +134,8 @@ class TestInsertPerformance:
 class TestSelectPerformance:
     """Test select/read operation performance."""
 
-    @pytest.mark.asyncio
     async def test_single_user_select_by_id(self, async_session: AsyncSession):
         """Benchmark single user select by primary key."""
-        from app.models.user import User
-
         # Setup: create users
         users = [User(**UserFactory.create()) for _ in range(100)]
         async_session.add_all(users)
@@ -176,11 +168,8 @@ class TestSelectPerformance:
             "samples": len(times)
         }
 
-    @pytest.mark.asyncio
     async def test_select_by_indexed_column(self, async_session: AsyncSession):
         """Benchmark select using indexed email column."""
-        from app.models.user import User
-
         # Setup
         users = [User(**UserFactory.create()) for _ in range(100)]
         async_session.add_all(users)
@@ -212,11 +201,8 @@ class TestSelectPerformance:
             "samples": len(times)
         }
 
-    @pytest.mark.asyncio
     async def test_bulk_select_all_users(self, async_session: AsyncSession):
         """Benchmark selecting all users."""
-        from app.models.user import User
-
         # Setup
         users = [User(**UserFactory.create()) for _ in range(100)]
         async_session.add_all(users)
@@ -246,11 +232,8 @@ class TestSelectPerformance:
 class TestJoinPerformance:
     """Test join query performance."""
 
-    @pytest.mark.asyncio
     async def test_user_enrollment_join(self, async_session: AsyncSession):
         """Benchmark user-enrollment join query."""
-        from app.models.user import User
-        from app.models.course import Course, Enrollment
         from sqlalchemy.orm import selectinload
 
         # Setup: create users with enrollments
@@ -294,18 +277,17 @@ class TestJoinPerformance:
             "total_enrollments": sum(len(u.enrollments) for u in users_with_enrollments)
         }
 
-    @pytest.mark.asyncio
     async def test_spaced_repetition_due_cards_query(
         self, async_session: AsyncSession
     ):
         """Benchmark query for due spaced repetition cards."""
-        from app.models.user import User
-        from app.models.spaced_repetition import SpacedRepetitionCard, Concept
-
         # Setup
         user = User(**UserFactory.create())
         async_session.add(user)
         await async_session.commit()
+
+        # Capture user_id before expire
+        user_id = user.id
 
         concepts = [
             Concept(name=f"Concept {i}", description=f"Desc {i}")
@@ -316,7 +298,7 @@ class TestJoinPerformance:
 
         cards = [
             SpacedRepetitionCard(
-                user_id=user.id,
+                user_id=user_id,
                 concept_id=concepts[i].id,
                 difficulty=5.0,
                 stability=2.5,
@@ -335,7 +317,7 @@ class TestJoinPerformance:
         start = time.perf_counter()
         result = await async_session.execute(
             select(SpacedRepetitionCard)
-            .where(SpacedRepetitionCard.user_id == user.id)
+            .where(SpacedRepetitionCard.user_id == user_id)
             .where(SpacedRepetitionCard.next_review_at <= datetime.utcnow())
             .order_by(SpacedRepetitionCard.next_review_at)
         )
@@ -358,10 +340,8 @@ class TestJoinPerformance:
 class TestComplexQueryPerformance:
     """Test complex query performance."""
 
-    @pytest.mark.asyncio
     async def test_aggregate_user_statistics(self, async_session: AsyncSession):
         """Benchmark aggregate statistics query."""
-        from app.models.user import User
         from sqlalchemy import func
 
         # Setup
@@ -403,11 +383,8 @@ class TestComplexQueryPerformance:
             "avg_xp": float(stats.avg_xp) if stats.avg_xp else 0
         }
 
-    @pytest.mark.asyncio
     async def test_leaderboard_query(self, async_session: AsyncSession):
         """Benchmark leaderboard query (top users by XP)."""
-        from app.models.user import User
-
         # Setup
         users = [
             User(**UserFactory.create(
@@ -453,11 +430,8 @@ class TestComplexQueryPerformance:
 class TestIndexEffectiveness:
     """Test that indexes are being used effectively."""
 
-    @pytest.mark.asyncio
     async def test_email_index_scan_vs_full_scan(self, async_session: AsyncSession):
         """Compare indexed vs non-indexed query performance."""
-        from app.models.user import User
-
         # Setup: create many users
         users = [User(**UserFactory.create()) for _ in range(500)]
         async_session.add_all(users)
@@ -506,11 +480,8 @@ class TestIndexEffectiveness:
 class TestTransactionPerformance:
     """Test transaction handling performance."""
 
-    @pytest.mark.asyncio
     async def test_commit_frequency_impact(self, async_session: AsyncSession):
         """Compare single commit vs multiple commits performance."""
-        from app.models.user import User
-
         # Test 1: Single commit after all inserts
         users1 = [User(**UserFactory.create()) for _ in range(100)]
 

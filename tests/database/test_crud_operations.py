@@ -17,19 +17,20 @@ from datetime import datetime, timedelta
 from sqlalchemy import select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .conftest import UserFactory, CourseFactory, ConceptFactory
+from .conftest import (
+    UserFactory, CourseFactory, ConceptFactory,
+    User, Course, Enrollment, Concept, SpacedRepetitionCard,
+    ReviewLog, UserAchievement
+)
 
-pytestmark = [pytest.mark.requires_db, pytest.mark.unit]
+pytestmark = [pytest.mark.asyncio]
 
 
 class TestUserCRUD:
     """Test User entity CRUD operations."""
 
-    @pytest.mark.asyncio
     async def test_create_user(self, async_session: AsyncSession):
         """Test creating a new user."""
-        from app.models.user import User
-
         user_data = UserFactory.create()
         user = User(**user_data)
         async_session.add(user)
@@ -40,11 +41,8 @@ class TestUserCRUD:
         assert user.username == user_data["username"]
         assert user.created_at is not None
 
-    @pytest.mark.asyncio
     async def test_read_user_by_id(self, async_session: AsyncSession):
         """Test reading a user by ID."""
-        from app.models.user import User
-
         # Create user
         user_data = UserFactory.create()
         user = User(**user_data)
@@ -64,11 +62,8 @@ class TestUserCRUD:
         assert fetched_user.id == user_id
         assert fetched_user.email == user_data["email"]
 
-    @pytest.mark.asyncio
     async def test_read_user_by_email(self, async_session: AsyncSession):
         """Test reading a user by email address."""
-        from app.models.user import User
-
         user_data = UserFactory.create(email="findme@example.com")
         user = User(**user_data)
         async_session.add(user)
@@ -84,11 +79,8 @@ class TestUserCRUD:
         assert fetched_user is not None
         assert fetched_user.email == "findme@example.com"
 
-    @pytest.mark.asyncio
     async def test_update_user(self, async_session: AsyncSession):
         """Test updating user fields."""
-        from app.models.user import User
-
         # Create user
         user_data = UserFactory.create()
         user = User(**user_data)
@@ -115,11 +107,8 @@ class TestUserCRUD:
         assert updated_user.full_name == "Updated Name"
         assert updated_user.total_xp == 500
 
-    @pytest.mark.asyncio
     async def test_update_user_partial(self, async_session: AsyncSession):
         """Test partial update (only specific fields)."""
-        from app.models.user import User
-
         user_data = UserFactory.create(total_xp=100, level=5)
         user = User(**user_data)
         async_session.add(user)
@@ -144,11 +133,8 @@ class TestUserCRUD:
         assert updated_user.total_xp == 200
         assert updated_user.level == 5  # Unchanged
 
-    @pytest.mark.asyncio
     async def test_delete_user(self, async_session: AsyncSession):
         """Test deleting a user."""
-        from app.models.user import User
-
         user_data = UserFactory.create()
         user = User(**user_data)
         async_session.add(user)
@@ -169,11 +155,8 @@ class TestUserCRUD:
 
         assert deleted_user is None
 
-    @pytest.mark.asyncio
     async def test_create_multiple_users(self, async_session: AsyncSession):
         """Test creating multiple users in batch."""
-        from app.models.user import User
-
         users = [User(**UserFactory.create()) for _ in range(5)]
         async_session.add_all(users)
         await async_session.commit()
@@ -188,11 +171,8 @@ class TestUserCRUD:
 class TestCourseCRUD:
     """Test Course entity CRUD operations."""
 
-    @pytest.mark.asyncio
     async def test_create_course(self, async_session: AsyncSession):
         """Test creating a new course."""
-        from app.models.course import Course
-
         course_data = CourseFactory.create()
         course = Course(**course_data)
         async_session.add(course)
@@ -201,11 +181,8 @@ class TestCourseCRUD:
         assert course.id is not None
         assert course.title == course_data["title"]
 
-    @pytest.mark.asyncio
     async def test_read_courses_by_domain(self, async_session: AsyncSession):
         """Test reading courses filtered by domain."""
-        from app.models.course import Course
-
         # Create courses in different domains
         course1 = Course(**CourseFactory.create(domain="Mathematics"))
         course2 = Course(**CourseFactory.create(domain="Computer Science"))
@@ -221,11 +198,8 @@ class TestCourseCRUD:
 
         assert len(math_courses) == 2
 
-    @pytest.mark.asyncio
     async def test_update_course_publish_status(self, async_session: AsyncSession):
         """Test publishing a course."""
-        from app.models.course import Course
-
         course = Course(**CourseFactory.create(is_published=False))
         async_session.add(course)
         await async_session.commit()
@@ -248,11 +222,8 @@ class TestCourseCRUD:
 
         assert updated_course.is_published is True
 
-    @pytest.mark.asyncio
     async def test_delete_course(self, async_session: AsyncSession):
         """Test deleting a course."""
-        from app.models.course import Course
-
         course = Course(**CourseFactory.create())
         async_session.add(course)
         await async_session.commit()
@@ -272,12 +243,8 @@ class TestCourseCRUD:
 class TestEnrollmentCRUD:
     """Test Enrollment entity CRUD operations."""
 
-    @pytest.mark.asyncio
     async def test_create_enrollment(self, async_session: AsyncSession):
         """Test enrolling a user in a course."""
-        from app.models.user import User
-        from app.models.course import Course, Enrollment
-
         user = User(**UserFactory.create())
         course = Course(**CourseFactory.create())
         async_session.add_all([user, course])
@@ -295,12 +262,8 @@ class TestEnrollmentCRUD:
         assert enrollment.user_id == user.id
         assert enrollment.course_id == course.id
 
-    @pytest.mark.asyncio
     async def test_update_enrollment_progress(self, async_session: AsyncSession):
         """Test updating enrollment progress."""
-        from app.models.user import User
-        from app.models.course import Course, Enrollment
-
         user = User(**UserFactory.create())
         course = Course(**CourseFactory.create())
         async_session.add_all([user, course])
@@ -332,12 +295,8 @@ class TestEnrollmentCRUD:
 
         assert updated_enrollment.progress == 0.5
 
-    @pytest.mark.asyncio
     async def test_complete_enrollment(self, async_session: AsyncSession):
         """Test marking enrollment as completed."""
-        from app.models.user import User
-        from app.models.course import Course, Enrollment
-
         user = User(**UserFactory.create())
         course = Course(**CourseFactory.create())
         async_session.add_all([user, course])
@@ -375,12 +334,8 @@ class TestEnrollmentCRUD:
 class TestSpacedRepetitionCRUD:
     """Test Spaced Repetition entities CRUD operations."""
 
-    @pytest.mark.asyncio
     async def test_create_spaced_repetition_card(self, async_session: AsyncSession):
         """Test creating a new spaced repetition card."""
-        from app.models.user import User
-        from app.models.spaced_repetition import SpacedRepetitionCard, Concept
-
         user = User(**UserFactory.create())
         concept = Concept(name="Test Concept", description="Test description")
         async_session.add_all([user, concept])
@@ -401,12 +356,8 @@ class TestSpacedRepetitionCRUD:
         assert card.id is not None
         assert card.difficulty == 5.0
 
-    @pytest.mark.asyncio
     async def test_update_fsrs_parameters(self, async_session: AsyncSession):
         """Test updating FSRS parameters after review."""
-        from app.models.user import User
-        from app.models.spaced_repetition import SpacedRepetitionCard, Concept
-
         user = User(**UserFactory.create())
         concept = Concept(name="Test", description="Test")
         async_session.add_all([user, concept])
@@ -453,12 +404,8 @@ class TestSpacedRepetitionCRUD:
         assert updated_card.difficulty == new_difficulty
         assert updated_card.review_count == 1
 
-    @pytest.mark.asyncio
     async def test_create_review_log(self, async_session: AsyncSession):
         """Test logging a review."""
-        from app.models.user import User
-        from app.models.spaced_repetition import SpacedRepetitionCard, Concept, ReviewLog
-
         user = User(**UserFactory.create())
         concept = Concept(name="Test", description="Test")
         async_session.add_all([user, concept])
@@ -488,12 +435,8 @@ class TestSpacedRepetitionCRUD:
         assert review.id is not None
         assert review.rating == 4
 
-    @pytest.mark.asyncio
     async def test_get_due_cards(self, async_session: AsyncSession):
         """Test querying cards due for review."""
-        from app.models.user import User
-        from app.models.spaced_repetition import SpacedRepetitionCard, Concept
-
         user = User(**UserFactory.create())
         concept = Concept(name="Test", description="Test")
         async_session.add_all([user, concept])
@@ -534,12 +477,8 @@ class TestSpacedRepetitionCRUD:
 class TestAchievementCRUD:
     """Test Achievement entity CRUD operations."""
 
-    @pytest.mark.asyncio
     async def test_create_achievement(self, async_session: AsyncSession):
         """Test unlocking an achievement."""
-        from app.models.user import User
-        from app.models.gamification import UserAchievement
-
         user = User(**UserFactory.create())
         async_session.add(user)
         await async_session.commit()
@@ -557,12 +496,8 @@ class TestAchievementCRUD:
         assert achievement.id is not None
         assert achievement.xp_reward == 100
 
-    @pytest.mark.asyncio
     async def test_get_user_achievements(self, async_session: AsyncSession):
         """Test retrieving all achievements for a user."""
-        from app.models.user import User
-        from app.models.gamification import UserAchievement
-
         user = User(**UserFactory.create())
         async_session.add(user)
         await async_session.commit()
@@ -601,11 +536,8 @@ class TestAchievementCRUD:
 class TestBulkOperations:
     """Test bulk database operations."""
 
-    @pytest.mark.asyncio
     async def test_bulk_insert_users(self, async_session: AsyncSession):
         """Test bulk inserting multiple users."""
-        from app.models.user import User
-
         users = [User(**UserFactory.create()) for _ in range(100)]
         async_session.add_all(users)
         await async_session.commit()
@@ -615,11 +547,8 @@ class TestBulkOperations:
 
         assert len(all_users) == 100
 
-    @pytest.mark.asyncio
     async def test_bulk_update(self, async_session: AsyncSession):
         """Test bulk updating multiple records."""
-        from app.models.user import User
-
         # Create users with level 1
         users = [User(**UserFactory.create(level=1)) for _ in range(50)]
         async_session.add_all(users)
@@ -642,11 +571,8 @@ class TestBulkOperations:
 
         assert len(updated_users) == 50
 
-    @pytest.mark.asyncio
     async def test_bulk_delete(self, async_session: AsyncSession):
         """Test bulk deleting multiple records."""
-        from app.models.user import User
-
         # Create active and inactive users
         active_users = [User(**UserFactory.create(is_active=True)) for _ in range(30)]
         inactive_users = [User(**UserFactory.create(is_active=False)) for _ in range(20)]

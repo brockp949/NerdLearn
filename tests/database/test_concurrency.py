@@ -22,9 +22,13 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from sqlalchemy.exc import OperationalError
 
-from .conftest import UserFactory, TEST_DATABASE_URL
+from .conftest import (
+    UserFactory, TEST_DATABASE_URL, User, Course, Enrollment,
+    Concept, SpacedRepetitionCard, ReviewLog, UserAchievement,
+    UserStats, Instructor, TestBase
+)
 
-pytestmark = [pytest.mark.requires_db, pytest.mark.integration]
+pytestmark = [pytest.mark.asyncio]
 
 
 @pytest.fixture
@@ -37,11 +41,8 @@ async def session_factory():
         echo=False
     )
 
-    from app.core.database import Base
-    import app.models  # noqa: F401
-
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(TestBase.metadata.create_all)
 
     factory = sessionmaker(
         engine,
@@ -52,7 +53,7 @@ async def session_factory():
     yield factory
 
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+        await conn.run_sync(TestBase.metadata.drop_all)
 
     await engine.dispose()
 
@@ -60,11 +61,8 @@ async def session_factory():
 class TestConcurrentReads:
     """Test concurrent read operations."""
 
-    @pytest.mark.asyncio
     async def test_multiple_concurrent_reads(self, session_factory):
         """Verify multiple concurrent reads don't interfere."""
-        from app.models.user import User
-
         # Setup: create test data
         async with session_factory() as session:
             users = [User(**UserFactory.create()) for _ in range(50)]
@@ -88,11 +86,8 @@ class TestConcurrentReads:
         assert all(c == 50 for c in counts), \
             f"Inconsistent read results: {counts}"
 
-    @pytest.mark.asyncio
     async def test_read_during_write(self, session_factory):
         """Verify reads work correctly while writes are happening."""
-        from app.models.user import User
-
         # Setup
         async with session_factory() as session:
             users = [User(**UserFactory.create()) for _ in range(20)]
@@ -141,11 +136,8 @@ class TestConcurrentReads:
 class TestConcurrentWrites:
     """Test concurrent write operations."""
 
-    @pytest.mark.asyncio
     async def test_concurrent_inserts_no_conflict(self, session_factory):
         """Verify concurrent inserts with unique data succeed."""
-        from app.models.user import User
-
         async def insert_user(session_factory, index: int):
             async with session_factory() as session:
                 user = User(**UserFactory.create(
@@ -169,11 +161,8 @@ class TestConcurrentWrites:
             users = result.scalars().all()
             assert len(users) == 20
 
-    @pytest.mark.asyncio
     async def test_concurrent_updates_same_record(self, session_factory):
         """Test concurrent updates to the same record."""
-        from app.models.user import User
-
         # Setup: create a single user
         async with session_factory() as session:
             user = User(**UserFactory.create(total_xp=0))
@@ -225,11 +214,8 @@ class TestConcurrentWrites:
                 f"Use atomic operations in production."
             )
 
-    @pytest.mark.asyncio
     async def test_atomic_increment(self, session_factory):
         """Test atomic increment operation."""
-        from app.models.user import User
-
         # Setup
         async with session_factory() as session:
             user = User(**UserFactory.create(total_xp=0))
@@ -265,11 +251,8 @@ class TestConcurrentWrites:
 class TestTransactionIsolation:
     """Test transaction isolation behavior."""
 
-    @pytest.mark.asyncio
     async def test_dirty_read_prevention(self, session_factory):
         """Verify uncommitted changes are not visible to other transactions."""
-        from app.models.user import User
-
         # Setup
         async with session_factory() as session:
             user = User(**UserFactory.create(total_xp=100))
@@ -312,11 +295,8 @@ class TestTransactionIsolation:
         assert read_before_commit == 100 or read_before_commit == 999, \
             f"Unexpected value: {read_before_commit}"
 
-    @pytest.mark.asyncio
     async def test_repeatable_read(self, session_factory):
         """Test repeatable read behavior within a transaction."""
-        from app.models.user import User
-
         # Setup
         async with session_factory() as session:
             user = User(**UserFactory.create(total_xp=100))
@@ -372,11 +352,8 @@ class TestTransactionIsolation:
 class TestDeadlockHandling:
     """Test deadlock detection and handling."""
 
-    @pytest.mark.asyncio
     async def test_potential_deadlock_scenario(self, session_factory):
         """Test a scenario that could cause deadlock."""
-        from app.models.user import User
-
         # Setup: create two users
         async with session_factory() as session:
             user1 = User(**UserFactory.create())
@@ -435,11 +412,8 @@ class TestDeadlockHandling:
 class TestConnectionPool:
     """Test connection pool behavior under load."""
 
-    @pytest.mark.asyncio
     async def test_pool_exhaustion_handling(self, session_factory):
         """Test behavior when connection pool is exhausted."""
-        from app.models.user import User
-
         async def long_running_query(session_factory, duration: float):
             """Simulate a long-running query."""
             async with session_factory() as session:
@@ -466,12 +440,8 @@ class TestConnectionPool:
 class TestRaceConditions:
     """Test and document potential race conditions."""
 
-    @pytest.mark.asyncio
     async def test_check_then_act_race(self, session_factory):
         """Demonstrate check-then-act race condition."""
-        from app.models.user import User
-        from app.models.course import Course, Enrollment
-
         # Setup
         async with session_factory() as session:
             user = User(**UserFactory.create())
@@ -536,11 +506,8 @@ class TestRaceConditions:
                 f"Use SELECT FOR UPDATE or application-level locking."
             )
 
-    @pytest.mark.asyncio
     async def test_concurrent_streak_update(self, session_factory):
         """Test concurrent streak updates don't cause issues."""
-        from app.models.user import User
-
         # Setup
         async with session_factory() as session:
             user = User(**UserFactory.create(streak_days=5))

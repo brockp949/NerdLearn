@@ -15,3 +15,6 @@ export * from './multimodal';
 
 // Phase 4: Innovation Mechanics (Social Learning)
 export * from './social';
+
+// Antigravity Testing Framework
+export * from './testing';
