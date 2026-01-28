@@ -3,12 +3,13 @@ GraphRAG Integration - Graph-Augmented Retrieval for Curriculum Generation
 
 Research alignment:
 - Microsoft GraphRAG: Community detection and hierarchical summarization
-- Louvain Algorithm: Detecting concept clusters in knowledge graphs
+- Leiden Algorithm: Superior community detection (Traag et al., 2019)
 - Global vs Local Queries: Community summaries for broad topics, vector search for specific QA
+- Map-Reduce Summarization: Scalable community summarization pattern
 
 Key Features:
-1. Community Detection: Group related concepts using Louvain clustering
-2. Community Summarization: LLM-generated summaries for each concept cluster
+1. Community Detection: Group related concepts using Leiden algorithm (preferred over Louvain)
+2. Community Summarization: Map-Reduce LLM-generated summaries for each concept cluster
 3. Graph Traversal: Navigate prerequisite chains for curriculum ordering
 4. Hybrid Retrieval: Combine graph structure with semantic similarity
 """
@@ -16,9 +17,12 @@ from typing import Dict, Any, List, Optional, Tuple, Set
 from dataclasses import dataclass, field
 from collections import defaultdict
 import networkx as nx
-from community import community_louvain  # python-louvain
+from community import community_louvain  # python-louvain (fallback)
+import igraph as ig
+import leidenalg
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
+import asyncio
 import json
 import logging
 
@@ -63,17 +67,20 @@ class GraphRAGService:
     def __init__(
         self,
         llm: Optional[ChatOpenAI] = None,
-        resolution: float = 1.0  # Louvain resolution parameter
+        resolution: float = 1.0,  # Leiden resolution parameter
+        algorithm: str = "leiden"  # "leiden" or "louvain"
     ):
         """
         Initialize GraphRAG service
 
         Args:
             llm: LLM for generating summaries
-            resolution: Louvain resolution (higher = more communities)
+            resolution: Resolution parameter (higher = more communities)
+            algorithm: Community detection algorithm ("leiden" preferred, "louvain" fallback)
         """
         self.llm = llm or ChatOpenAI(model="gpt-4o-mini", temperature=0.3)
         self.resolution = resolution
+        self.algorithm = algorithm
         self._community_cache: Dict[int, Dict[int, ConceptCommunity]] = {}
 
     def build_networkx_graph(
@@ -119,10 +126,12 @@ class GraphRAGService:
         course_id: int
     ) -> Dict[int, ConceptCommunity]:
         """
-        Detect concept communities using Louvain algorithm
+        Detect concept communities using Leiden algorithm (preferred) or Louvain.
 
-        Research basis: Louvain algorithm provides O(n log n) community
-        detection with modularity optimization.
+        Research basis: Leiden algorithm (Traag et al., 2019) provides:
+        - Guaranteed well-connected communities (improvement over Louvain)
+        - Better modularity optimization
+        - O(n log n) complexity
 
         Args:
             G: NetworkX graph
@@ -143,13 +152,16 @@ class GraphRAGService:
             logger.warning("Empty graph - no communities to detect")
             return {}
 
-        # Detect communities
+        # Detect communities using configured algorithm
         try:
-            partition = community_louvain.best_partition(
-                G_undirected,
-                resolution=self.resolution,
-                random_state=42
-            )
+            if self.algorithm == "leiden":
+                partition = self._run_leiden(G_undirected)
+            else:
+                partition = community_louvain.best_partition(
+                    G_undirected,
+                    resolution=self.resolution,
+                    random_state=42
+                )
         except Exception as e:
             logger.error(f"Community detection failed: {e}")
             # Fallback: treat each node as its own community
@@ -192,6 +204,73 @@ class GraphRAGService:
         logger.info(f"Detected {len(communities)} communities for course {course_id}")
 
         return communities
+
+    def _run_leiden(self, G: nx.Graph) -> Dict[Any, int]:
+        """
+        Run Leiden algorithm for community detection.
+
+        Research alignment: Leiden algorithm provides superior community detection:
+        - Guarantees all communities are connected (Louvain does not)
+        - Better modularity scores on benchmark datasets
+        - Faster convergence through smart local moving
+
+        Args:
+            G: NetworkX undirected graph
+
+        Returns:
+            Dict mapping node to community_id
+        """
+        if len(G.nodes()) == 0:
+            return {}
+
+        # Convert NetworkX to igraph
+        node_list = list(G.nodes())
+        node_to_idx = {node: idx for idx, node in enumerate(node_list)}
+
+        # Create igraph graph
+        ig_graph = ig.Graph()
+        ig_graph.add_vertices(len(node_list))
+
+        # Add edges with weights
+        edges = []
+        weights = []
+        for u, v, data in G.edges(data=True):
+            edges.append((node_to_idx[u], node_to_idx[v]))
+            weights.append(data.get('weight', 1.0))
+
+        if edges:
+            ig_graph.add_edges(edges)
+            ig_graph.es['weight'] = weights
+
+        # Run Leiden algorithm with CPM (Constant Potts Model) for resolution support
+        # or use ModularityVertexPartition for standard modularity
+        try:
+            partition = leidenalg.find_partition(
+                ig_graph,
+                leidenalg.RBConfigurationVertexPartition,
+                weights='weight' if edges else None,
+                resolution_parameter=self.resolution,
+                n_iterations=-1,  # Run until convergence
+                seed=42  # For reproducibility
+            )
+        except Exception as e:
+            logger.warning(f"Leiden with resolution failed, using Modularity: {e}")
+            partition = leidenalg.find_partition(
+                ig_graph,
+                leidenalg.ModularityVertexPartition,
+                weights='weight' if edges else None,
+                n_iterations=-1,
+                seed=42
+            )
+
+        # Convert back to node -> community_id dict
+        result = {}
+        for community_id, members in enumerate(partition):
+            for idx in members:
+                result[node_list[idx]] = community_id
+
+        logger.debug(f"Leiden found {len(partition)} communities")
+        return result
 
     async def summarize_community(
         self,
@@ -318,6 +397,81 @@ Also provide 3-5 keywords that capture this cluster's focus.""")
 
         return dict(hierarchy)
 
+    async def map_reduce_summarize(
+        self,
+        communities: Dict[int, ConceptCommunity],
+        topic: str,
+        batch_size: int = 5
+    ) -> str:
+        """
+        Map-Reduce pattern for summarizing large numbers of communities.
+
+        Research alignment: Map-Reduce summarization pattern from GraphRAG paper:
+        - MAP: Generate summaries for each community in parallel
+        - REDUCE: Combine community summaries into global overview
+
+        This scales better than sequential summarization for courses
+        with many concept clusters.
+
+        Args:
+            communities: All detected communities
+            topic: Course topic
+            batch_size: Number of communities to process in parallel
+
+        Returns:
+            Combined summary string
+        """
+        if not communities:
+            return f"This course covers {topic} with no established concept structure yet."
+
+        # MAP phase: Summarize communities in parallel batches
+        community_list = list(communities.values())
+        intermediate_summaries = []
+
+        for i in range(0, len(community_list), batch_size):
+            batch = community_list[i:i + batch_size]
+            # Process batch in parallel
+            tasks = [self.summarize_community(c, topic) for c in batch]
+            batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            for community, result in zip(batch, batch_results):
+                if isinstance(result, Exception):
+                    logger.error(f"Failed to summarize community: {result}")
+                    intermediate_summaries.append(
+                        f"- {community.central_concept}: Concepts related to {', '.join(community.concepts[:3])}"
+                    )
+                else:
+                    intermediate_summaries.append(
+                        f"- {community.central_concept}: {result}"
+                    )
+
+        # REDUCE phase: Combine into final summary
+        reduce_prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are an expert curriculum synthesizer.
+Combine multiple concept cluster summaries into a coherent course overview."""),
+            ("human", """Course Topic: {topic}
+
+Community Summaries:
+{summaries}
+
+Synthesize these into a comprehensive 4-6 sentence overview that:
+1. Captures the full scope of the curriculum
+2. Shows how different concept clusters connect
+3. Identifies the progression from foundational to advanced
+4. Highlights practical applications and skills developed""")
+        ])
+
+        try:
+            messages = reduce_prompt.format_messages(
+                topic=topic,
+                summaries="\n".join(intermediate_summaries[:15])  # Limit for context
+            )
+            response = await self.llm.ainvoke(messages)
+            return response.content
+        except Exception as e:
+            logger.error(f"Map-Reduce reduce phase failed: {e}")
+            return f"This course covers {topic} through {len(communities)} interconnected concept clusters."
+
     async def generate_global_summary(
         self,
         communities: Dict[int, ConceptCommunity],
@@ -329,6 +483,8 @@ Also provide 3-5 keywords that capture this cluster's focus.""")
         This is the key GraphRAG capability: synthesizing broad overviews
         that standard RAG cannot provide.
 
+        Uses Map-Reduce pattern for scalability with large community counts.
+
         Args:
             communities: All detected communities
             topic: Course topic
@@ -338,6 +494,10 @@ Also provide 3-5 keywords that capture this cluster's focus.""")
         """
         if not communities:
             return f"This course covers {topic} with no established concept structure yet."
+
+        # Use Map-Reduce for large community sets
+        if len(communities) > 8:
+            return await self.map_reduce_summarize(communities, topic)
 
         # Summarize each community first
         community_summaries = []
