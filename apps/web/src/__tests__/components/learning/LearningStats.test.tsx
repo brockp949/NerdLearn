@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor, act } from '@testing-library/react'
+import { render, screen, act } from '@testing-library/react'
 import { LearningStats } from '@/components/learning/LearningStats'
 import React from 'react'
 
@@ -96,15 +96,13 @@ describe('LearningStats Component', () => {
     // Achievement should be visible initially
     expect(screen.getByText('Test Achievement')).toBeDefined()
 
-    // Fast-forward 5 seconds
-    act(() => {
+    // Fast-forward 5 seconds and flush all pending updates
+    await act(async () => {
       vi.advanceTimersByTime(5000)
     })
 
-    // Achievement should be hidden
-    await waitFor(() => {
-      expect(screen.queryByText('Test Achievement')).toBeNull()
-    })
+    // Achievement should be hidden after timer
+    expect(screen.queryByText('Test Achievement')).toBeNull()
   })
 
   it('animates XP counter when showAnimation is true', async () => {
@@ -121,15 +119,13 @@ describe('LearningStats Component', () => {
     // Initial value should be previous total (200 - 100 = 100)
     expect(screen.getByText('100')).toBeDefined()
 
-    // Fast-forward animation
-    act(() => {
+    // Fast-forward animation and flush all pending updates
+    await act(async () => {
       vi.advanceTimersByTime(1100)
     })
 
     // Should reach final value
-    await waitFor(() => {
-      expect(screen.getByText('200')).toBeDefined()
-    })
+    expect(screen.getByText('200')).toBeDefined()
   })
 
   it('does not animate when showAnimation is false', () => {
@@ -150,7 +146,7 @@ describe('LearningStats Component', () => {
   it('formats large XP numbers with locale string', () => {
     render(
       <LearningStats
-        xp_earned={0}
+        xp_earned={100}
         new_total_xp={1234567}
         level={50}
         level_progress={50}
@@ -158,8 +154,10 @@ describe('LearningStats Component', () => {
       />
     )
 
-    // Should format with commas (e.g., 1,234,567)
-    expect(screen.getByText(/1.*234.*567/)).toBeDefined()
+    // The Total XP banner shows when xp_earned > 0
+    // toLocaleString() formats numbers with appropriate separators
+    const formattedNumber = (1234567).toLocaleString()
+    expect(screen.getByText(formattedNumber)).toBeDefined()
   })
 
   it('displays correct progress bar width', () => {

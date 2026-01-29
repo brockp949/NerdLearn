@@ -45,3 +45,13 @@ export {
   useTestSuite,
   useRunTests,
 } from './use-tests';
+
+// PACER Learning Protocol
+export {
+  useClassifier,
+  useAnalogyCritique,
+  useEvidenceLinking,
+  useProceduralProgress,
+  usePACERProfile,
+  usePACER,
+} from './use-pacer';

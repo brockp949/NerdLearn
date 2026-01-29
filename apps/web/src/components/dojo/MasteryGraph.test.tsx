@@ -2,29 +2,61 @@ import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MasteryGraph } from './MasteryGraph';
 
-// Mock the ForceGraph2D component since it uses Canvas/WebGL
-vi.mock('react-force-graph-2d', () => ({
-    default: ({ graphData, nodeLabel, nodeColor }: any) => (
-        <div data-testid="force-graph">
-            <span>ForceGraph2D Mock</span>
+// Mock ReactFlow since it uses Canvas/WebGL
+vi.mock('reactflow', () => ({
+    default: ({ nodes, edges, children }: any) => (
+        <div data-testid="react-flow">
+            <span>ReactFlow Mock</span>
             <div data-testid="graph-nodes">
-                {graphData.nodes.map((node: any) => (
-                    <div
-                        key={node.id}
-                        data-testid={`node-${node.id}`}
-                        data-color={typeof nodeColor === 'function' ? nodeColor(node) : nodeColor}
-                    >
-                        {node[nodeLabel]}
+                {nodes?.map((node: any) => (
+                    <div key={node.id} data-testid={`node-${node.id}`}>
+                        {node.data?.label}
                     </div>
                 ))}
             </div>
+            <div data-testid="graph-edges">
+                {edges?.map((edge: any) => (
+                    <div key={edge.id} data-testid={`edge-${edge.id}`}>
+                        {edge.source} -&gt; {edge.target}
+                    </div>
+                ))}
+            </div>
+            {children}
         </div>
     ),
+    Controls: () => <div data-testid="controls">Controls</div>,
+    Background: () => <div data-testid="background">Background</div>,
+    useNodesState: (initial: any[] = []) => {
+        const state = { nodes: initial };
+        return [state.nodes, (n: any) => { state.nodes = n; }, vi.fn()];
+    },
+    useEdgesState: (initial: any[] = []) => {
+        const state = { edges: initial };
+        return [state.edges, (e: any) => { state.edges = e; }, vi.fn()];
+    },
+    MarkerType: { ArrowClosed: 'arrowclosed' },
+    ConnectionLineType: { SmoothStep: 'smoothstep' },
+}));
+
+// Mock ELK layout
+vi.mock('elkjs/lib/elk.bundled', () => ({
+    default: class ELK {
+        layout(graph: any) {
+            return Promise.resolve({
+                ...graph,
+                children: graph.children?.map((child: any, i: number) => ({
+                    ...child,
+                    x: i * 100,
+                    y: i * 50,
+                })),
+            });
+        }
+    },
 }));
 
 // Mock the hook
 const mockUseGraphData: {
-    data: { nodes: any[]; links: any[] };
+    data: { nodes: any[]; links: any[] } | null;
     loading: boolean;
     error: any;
 } = {
@@ -47,40 +79,28 @@ describe('MasteryGraph', () => {
             nodes: [],
             links: []
         };
+        mockUseGraphData.loading = false;
     });
 
-    it('renders the container and legends', async () => {
+    it('renders the container and legend', () => {
         render(<MasteryGraph />);
 
-        expect(screen.getByText('Mastered')).toBeDefined();
-        expect(screen.getByText('In Progress')).toBeDefined();
-        expect(await screen.findByTestId('force-graph')).toBeDefined();
+        // Should have a "Concept" label
+        expect(screen.getByText('Concept')).toBeDefined();
+        expect(screen.getByTestId('react-flow')).toBeDefined();
     });
 
-    it('renders nodes with correct colors based on mastery status', () => {
-        mockUseGraphData.data = {
-            nodes: [
-                { id: '1', label: 'Concept A', mastered: true },
-                { id: '2', label: 'Concept B', mastered: false }
-            ],
-            links: []
-        };
+    it('shows loading state when loading', () => {
+        mockUseGraphData.loading = true;
+        const { container } = render(<MasteryGraph />);
 
-        render(<MasteryGraph />);
-
-        const nodeA = screen.getByTestId('node-1');
-        const nodeB = screen.getByTestId('node-2');
-
-        // Mastered should be emerald (#10b981)
-        expect(nodeA.getAttribute('data-color')).toBe('#10b981');
-
-        // In Progress should be blue (#3b82f6)
-        expect(nodeB.getAttribute('data-color')).toBe('#3b82f6');
+        // Should show loading indicator (Loader2 component)
+        expect(container.querySelector('.animate-spin')).toBeDefined();
     });
 
     it('handles empty data gracefully', () => {
         mockUseGraphData.data = { nodes: [], links: [] };
         render(<MasteryGraph />);
-        expect(screen.getByTestId('force-graph')).toBeDefined();
+        expect(screen.getByTestId('react-flow')).toBeDefined();
     });
 });

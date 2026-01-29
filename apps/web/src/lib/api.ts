@@ -431,4 +431,158 @@ export const gamificationApi = {
     },
 };
 
+// =============================================================================
+// PACER LEARNING PROTOCOL API
+// =============================================================================
+
+export const pacerApi = {
+    // Classification
+    classify: async (data: { content: string; context?: Record<string, unknown> }) => {
+        const response = await api.post('/pacer/classify', data);
+        return response.data;
+    },
+
+    classifyTriage: async (data: { content: string; context?: Record<string, unknown> }) => {
+        const response = await api.post('/pacer/classify/triage', data);
+        return response.data;
+    },
+
+    classifyBatch: async (contents: string[], context?: Record<string, unknown>) => {
+        const response = await api.post('/pacer/classify/batch', { contents, context });
+        return response.data;
+    },
+
+    // Content Management
+    createContent: async (data: {
+        course_id: number;
+        module_id?: number;
+        title: string;
+        content: string;
+        pacer_type?: string;
+        metadata?: Record<string, unknown>;
+    }) => {
+        const response = await api.post('/pacer/content', data);
+        return response.data;
+    },
+
+    getContent: async (courseId: number, pacerType?: string, limit = 50, offset = 0) => {
+        const response = await api.get(`/pacer/content/${courseId}`, {
+            params: { pacer_type: pacerType, limit, offset },
+        });
+        return response.data;
+    },
+
+    // Analogies
+    createAnalogy: async (data: {
+        course_id: number;
+        module_id?: number;
+        title: string;
+        content: string;
+        source_domain: string;
+        target_domain: string;
+        mappings: Array<{ source_element: string; target_element: string; relationship?: string }>;
+        breakdown_points: Array<{ aspect: string; reason: string; severity?: string; educational_note?: string }>;
+    }) => {
+        const response = await api.post('/pacer/analogies', data);
+        return response.data;
+    },
+
+    getAnalogy: async (analogyId: number, includeBreakdowns = false) => {
+        const response = await api.get(`/pacer/analogies/${analogyId}`, {
+            params: { include_breakdowns: includeBreakdowns },
+        });
+        return response.data;
+    },
+
+    submitCritique: async (
+        analogyId: number,
+        data: { identifiedBreakdowns: string[]; explanations: string[] },
+        userId: number
+    ) => {
+        const response = await api.post(`/pacer/analogies/${analogyId}/critique`, {
+            identified_breakdowns: data.identifiedBreakdowns,
+            explanations: data.explanations,
+        }, {
+            params: { user_id: userId },
+        });
+        return response.data;
+    },
+
+    // Evidence Linking
+    linkEvidence: async (data: {
+        evidenceItemId: number;
+        conceptIds: number[];
+        relationshipType?: string;
+        strength?: number;
+        citation?: string;
+    }) => {
+        const response = await api.post('/pacer/evidence/link', {
+            evidence_item_id: data.evidenceItemId,
+            concept_ids: data.conceptIds,
+            relationship_type: data.relationshipType || 'supports',
+            strength: data.strength || 0.7,
+            citation: data.citation,
+        });
+        return response.data;
+    },
+
+    getEvidenceForConcept: async (conceptId: number, relationshipType?: string) => {
+        const response = await api.get(`/pacer/evidence/concept/${conceptId}`, {
+            params: { relationship_type: relationshipType },
+        });
+        return response.data;
+    },
+
+    autoLinkEvidence: async (content: string, courseId: number, minRelevance = 0.3) => {
+        const response = await api.post('/pacer/evidence/auto-link', null, {
+            params: { evidence_content: content, course_id: courseId, min_relevance: minRelevance },
+        });
+        return response.data;
+    },
+
+    // Procedural Progress
+    startProcedure: async (itemId: number, userId: number) => {
+        const response = await api.post(`/pacer/procedural/${itemId}/start`, null, {
+            params: { user_id: userId },
+        });
+        return response.data;
+    },
+
+    completeStep: async (
+        itemId: number,
+        data: { stepNumber: number; success: boolean; timeMs: number; errorCount?: number },
+        userId: number
+    ) => {
+        const response = await api.post(`/pacer/procedural/${itemId}/step`, {
+            step_number: data.stepNumber,
+            success: data.success,
+            time_ms: data.timeMs,
+            error_count: data.errorCount || 0,
+        }, {
+            params: { user_id: userId },
+        });
+        return response.data;
+    },
+
+    getProceduralStatus: async (itemId: number, userId: number) => {
+        const response = await api.get(`/pacer/procedural/${itemId}/status`, {
+            params: { user_id: userId },
+        });
+        return response.data;
+    },
+
+    getActiveProcedures: async (userId: number, includeCompleted = false) => {
+        const response = await api.get(`/pacer/procedural/user/${userId}/active`, {
+            params: { include_completed: includeCompleted },
+        });
+        return response.data;
+    },
+
+    // User Profile
+    getProfile: async (userId: number) => {
+        const response = await api.get(`/pacer/profile/${userId}`);
+        return response.data;
+    },
+};
+
 export default api;

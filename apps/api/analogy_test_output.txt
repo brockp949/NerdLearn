@@ -1,0 +1,38 @@
+============================= test session starts =============================
+platform win32 -- Python 3.12.10, pytest-8.4.2, pluggy-1.6.0 -- C:\Program Files\Python312\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\brock\Documents\NerdLearn\NerdLearn\apps\api
+configfile: pytest.ini
+plugins: anyio-4.12.0, langsmith-0.6.2, asyncio-1.3.0, cov-7.0.0, mock-3.15.1, xdist-3.8.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collecting ... collected 19 items
+
+tests/unit/adaptive/pacer/test_analogy_engine.py::TestAnalogyCritiqueEngineBasic::test_create_analogy PASSED [  5%]
+tests/unit/adaptive/pacer/test_analogy_engine.py::TestCritiqueEvaluationCounterTests::test_perfect_critique PASSED [ 10%]
+tests/unit/adaptive/pacer/test_analogy_engine.py::TestCritiqueEvaluationCounterTests::test_critique_with_false_positives FAILED [ 15%]
+tests/unit/adaptive/pacer/test_analogy_engine.py::TestCritiqueEvaluationCounterTests::test_critique_with_missed_breakdowns PASSED [ 21%]
+tests/unit/adaptive/pacer/test_analogy_engine.py::TestCritiqueEvaluationCounterTests::test_empty_critique PASSED [ 26%]
+tests/unit/adaptive/pacer/test_analogy_engine.py::TestCritiqueEvaluationCounterTests::test_all_false_positives PASSED [ 31%]
+tests/unit/adaptive/pacer/test_analogy_engine.py::TestFuzzyMatchingCounterTests::test_fuzzy_match_paraphrased_breakdown PASSED [ 36%]
+tests/unit/adaptive/pacer/test_analogy_engine.py::TestFuzzyMatchingCounterTests::test_fuzzy_match_strict_threshold PASSED [ 42%]
+tests/unit/adaptive/pacer/test_analogy_engine.py::TestFuzzyMatchingCounterTests::test_fuzzy_match_exact_wording PASSED [ 47%]
+tests/unit/adaptive/pacer/test_analogy_engine.py::TestFeedbackGenerationCounterTests::test_excellent_feedback_for_high_score PASSED [ 52%]
+tests/unit/adaptive/pacer/test_analogy_engine.py::TestFeedbackGenerationCounterTests::test_constructive_feedback_for_medium_score PASSED [ 57%]
+tests/unit/adaptive/pacer/test_analogy_engine.py::TestFeedbackGenerationCounterTests::test_guidance_feedback_for_low_score PASSED [ 63%]
+tests/unit/adaptive/pacer/test_analogy_engine.py::TestBreakdownPointSeverityCounterTests::test_missed_breakdowns_include_severity PASSED [ 68%]
+tests/unit/adaptive/pacer/test_analogy_engine.py::TestAnalogyCreationCounterTests::test_create_analogy_minimal_data PASSED [ 73%]
+tests/unit/adaptive/pacer/test_analogy_engine.py::TestAnalogyCreationCounterTests::test_create_analogy_default_severity PASSED [ 78%]
+tests/unit/adaptive/pacer/test_analogy_engine.py::TestAnalogyCreationCounterTests::test_create_analogy_default_relationship PASSED [ 84%]
+tests/unit/adaptive/pacer/test_analogy_engine.py::TestAnalogyCreationCounterTests::test_critique_prompt_generation PASSED [ 89%]
+tests/unit/adaptive/pacer/test_analogy_engine.py::TestCaseSensitivityCounterTests::test_case_insensitive_matching PASSED [ 94%]
+tests/unit/adaptive/pacer/test_analogy_engine.py::TestCaseSensitivityCounterTests::test_whitespace_handling PASSED [100%]
+
+================================== FAILURES ===================================
+____ TestCritiqueEvaluationCounterTests.test_critique_with_false_positives ____
+tests\unit\adaptive\pacer\test_analogy_engine.py:147: in test_critique_with_false_positives
+    assert "Pipes can rust" in result.false_positives
+E   AssertionError: assert 'Pipes can rust' in ['pipes can rust']
+E    +  where ['pipes can rust'] = CritiqueEvaluation(score=0.6666666666666666, precision=0.6666666666666666, recall=0.6666666666666666, correctly_identified=['water leaks out', 'water is visible'], missed_breakdowns=[{'aspect': 'Water stores in tanks', 'reason': 'Electricity needs batteries', 'note': 'Storage concept', 'severity': 'major'}], false_positives=['pipes can rust'], feedback='Good effort! You missed 1 breakdown point(s). Review the hidden points to deepen your understanding.').false_positives
+=========================== short test summary info ===========================
+FAILED tests/unit/adaptive/pacer/test_analogy_engine.py::TestCritiqueEvaluationCounterTests::test_critique_with_false_positives
+======================== 1 failed, 18 passed in 2.54s =========================

@@ -80,7 +80,10 @@
       "Bash(netstat:*)",
       "Bash(lsof:*)",
       "Bash(ss:*)",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Bash(gh pr list:*)",
+      "Bash(git cherry-pick:*)",
+      "Bash(wc:*)"
     ],
     "deny": [],
     "ask": []

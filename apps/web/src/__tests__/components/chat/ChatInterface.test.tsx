@@ -1,11 +1,23 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import React from 'react'
 
+// Store original fetch before MSW takes over
+const originalFetch = globalThis.fetch
+
 // Mock fetch for API calls
 const mockFetch = vi.fn()
-global.fetch = mockFetch
+
+beforeAll(() => {
+  // Override fetch with our mock
+  globalThis.fetch = mockFetch as typeof fetch
+})
+
+afterAll(() => {
+  // Restore original fetch
+  globalThis.fetch = originalFetch
+})
 
 // Mock components from UI library
 vi.mock('@/components/ui/button', () => ({

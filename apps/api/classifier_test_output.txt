@@ -1,0 +1,76 @@
+============================= test session starts =============================
+platform win32 -- Python 3.12.10, pytest-8.4.2, pluggy-1.6.0 -- C:\Program Files\Python312\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\brock\Documents\NerdLearn\NerdLearn\apps\api
+configfile: pytest.ini
+plugins: anyio-4.12.0, langsmith-0.6.2, asyncio-1.3.0, cov-7.0.0, mock-3.15.1, xdist-3.8.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collecting ... collected 30 items
+
+tests/unit/adaptive/pacer/test_pacer_classifier.py::TestPACERClassifierBasic::test_classifier_initialization PASSED [  3%]
+tests/unit/adaptive/pacer/test_pacer_classifier.py::TestPACERClassifierBasic::test_classify_returns_result PASSED [  6%]
+tests/unit/adaptive/pacer/test_pacer_classifier.py::TestPACERClassifierBasic::test_triage_returns_decisions PASSED [ 10%]
+tests/unit/adaptive/pacer/test_pacer_classifier.py::TestMisclassificationCounterTests::test_procedural_disguised_as_conceptual PASSED [ 13%]
+tests/unit/adaptive/pacer/test_pacer_classifier.py::TestMisclassificationCounterTests::test_conceptual_disguised_as_procedural PASSED [ 16%]
+tests/unit/adaptive/pacer/test_pacer_classifier.py::TestMisclassificationCounterTests::test_analogous_without_explicit_markers FAILED [ 20%]
+tests/unit/adaptive/pacer/test_pacer_classifier.py::TestMisclassificationCounterTests::test_evidence_without_statistics PASSED [ 23%]
+tests/unit/adaptive/pacer/test_pacer_classifier.py::TestMisclassificationCounterTests::test_reference_with_explanatory_context PASSED [ 26%]
+tests/unit/adaptive/pacer/test_pacer_classifier.py::TestMisclassificationCounterTests::test_pure_reference_data PASSED [ 30%]
+tests/unit/adaptive/pacer/test_pacer_classifier.py::TestHybridContentCounterTests::test_hybrid_all_types_present PASSED [ 33%]
+tests/unit/adaptive/pacer/test_pacer_classifier.py::TestHybridContentCounterTests::test_ambiguous_procedural_conceptual PASSED [ 36%]
+tests/unit/adaptive/pacer/test_pacer_classifier.py::TestHybridContentCounterTests::test_evidence_with_conceptual_framing PASSED [ 40%]
+tests/unit/adaptive/pacer/test_pacer_classifier.py::TestEdgeCaseCounterTests::test_minimal_content PASSED [ 43%]
+tests/unit/adaptive/pacer/test_pacer_classifier.py::TestEdgeCaseCounterTests::test_single_sentence_procedural PASSED [ 46%]
+tests/unit/adaptive/pacer/test_pacer_classifier.py::TestEdgeCaseCounterTests::test_single_sentence_analogy PASSED [ 50%]
+tests/unit/adaptive/pacer/test_pacer_classifier.py::TestEdgeCaseCounterTests::test_adversarial_mixed_signals PASSED [ 53%]
+tests/unit/adaptive/pacer/test_pacer_classifier.py::TestEdgeCaseCounterTests::test_content_with_code PASSED [ 56%]
+tests/unit/adaptive/pacer/test_pacer_classifier.py::TestEdgeCaseCounterTests::test_content_with_urls PASSED [ 60%]
+tests/unit/adaptive/pacer/test_pacer_classifier.py::TestConfidenceCalibrationCounterTests::test_high_confidence_for_clear_procedural FAILED [ 63%]
+tests/unit/adaptive/pacer/test_pacer_classifier.py::TestConfidenceCalibrationCounterTests::test_high_confidence_for_clear_evidence PASSED [ 66%]
+tests/unit/adaptive/pacer/test_pacer_classifier.py::TestConfidenceCalibrationCounterTests::test_lower_confidence_for_ambiguous PASSED [ 70%]
+tests/unit/adaptive/pacer/test_pacer_classifier.py::TestConfidenceCalibrationCounterTests::test_alternatives_for_close_classifications FAILED [ 73%]
+tests/unit/adaptive/pacer/test_pacer_classifier.py::TestTriageDecisionTreeCounterTests::test_triage_terminates_correctly PASSED [ 76%]
+tests/unit/adaptive/pacer/test_pacer_classifier.py::TestTriageDecisionTreeCounterTests::test_triage_decision_path_is_logical PASSED [ 80%]
+tests/unit/adaptive/pacer/test_pacer_classifier.py::TestTriageDecisionTreeCounterTests::test_triage_falls_through_to_reference PASSED [ 83%]
+tests/unit/adaptive/pacer/test_pacer_classifier.py::TestRecommendedActionCounterTests::test_procedural_recommends_practice PASSED [ 86%]
+tests/unit/adaptive/pacer/test_pacer_classifier.py::TestRecommendedActionCounterTests::test_analogous_recommends_critique FAILED [ 90%]
+tests/unit/adaptive/pacer/test_pacer_classifier.py::TestRecommendedActionCounterTests::test_conceptual_recommends_map PASSED [ 93%]
+tests/unit/adaptive/pacer/test_pacer_classifier.py::TestRecommendedActionCounterTests::test_evidence_recommends_link PASSED [ 96%]
+tests/unit/adaptive/pacer/test_pacer_classifier.py::TestRecommendedActionCounterTests::test_reference_recommends_recall PASSED [100%]
+
+================================== FAILURES ===================================
+__ TestMisclassificationCounterTests.test_analogous_without_explicit_markers __
+tests\unit\adaptive\pacer\test_pacer_classifier.py:114: in test_analogous_without_explicit_markers
+    assert result.pacer_type == PACERType.ANALOGOUS, \
+E   AssertionError: Implicit metaphor should be Analogous, got PACERType.PROCEDURAL
+E   assert <PACERType.PR... 'procedural'> == <PACERType.AN...: 'analogous'>
+E     
+E     - analogous
+E     + procedural
+_ TestConfidenceCalibrationCounterTests.test_high_confidence_for_clear_procedural _
+tests\unit\adaptive\pacer\test_pacer_classifier.py:338: in test_high_confidence_for_clear_procedural
+    assert result.confidence >= 0.6, \
+E   AssertionError: Clear procedural should have confidence >= 0.6, got 0.4166666666666667
+E   assert 0.4166666666666667 >= 0.6
+E    +  where 0.4166666666666667 = ClassificationResult(pacer_type=<PACERType.PROCEDURAL: 'procedural'>, confidence=0.4166666666666667, reasoning='Moderate confidence: Contains step-by-step instructions or how-to guidance', alternative_types=[], metadata={'method': 'rule_based', 'all_scores': {'procedural': 0.4166666666666667, 'analogous': 0.0, 'conceptual': 0.0, 'evidence': 0.0, 'reference': 0.0}}, content_hash='a46f3c158df392d4').confidence
+_ TestConfidenceCalibrationCounterTests.test_alternatives_for_close_classifications _
+tests\unit\adaptive\pacer\test_pacer_classifier.py:377: in test_alternatives_for_close_classifications
+    assert len(result.alternative_types) > 0, \
+E   AssertionError: Low-confidence classifications should provide alternatives
+E   assert 0 > 0
+E    +  where 0 = len([])
+E    +    where [] = ClassificationResult(pacer_type=<PACERType.CONCEPTUAL: 'conceptual'>, confidence=0.31746031746031744, reasoning='Low confidence (consider manual review): Explains theories, principles, or causal relationships', alternative_types=[], metadata={'method': 'rule_based', 'all_scores': {'procedural': 0.0, 'analogous': 0.0, 'conceptual': 0.31746031746031744, 'evidence': 0.0, 'reference': 0.0}}, content_hash='de0779593d23d630').alternative_types
+____ TestRecommendedActionCounterTests.test_analogous_recommends_critique _____
+tests\unit\adaptive\pacer\test_pacer_classifier.py:454: in test_analogous_recommends_critique
+    assert "breakdown" in action["description"].lower() or "critique" in action["description"].lower()
+E   AssertionError: assert ('breakdown' in 'identify where the analogy breaks down' or 'critique' in 'identify where the analogy breaks down')
+E    +  where 'identify where the analogy breaks down' = <built-in method lower of str object at 0x0000027AAC548030>()
+E    +    where <built-in method lower of str object at 0x0000027AAC548030> = 'Identify where the analogy breaks down'.lower
+E    +  and   'identify where the analogy breaks down' = <built-in method lower of str object at 0x0000027AAC548030>()
+E    +    where <built-in method lower of str object at 0x0000027AAC548030> = 'Identify where the analogy breaks down'.lower
+=========================== short test summary info ===========================
+FAILED tests/unit/adaptive/pacer/test_pacer_classifier.py::TestMisclassificationCounterTests::test_analogous_without_explicit_markers
+FAILED tests/unit/adaptive/pacer/test_pacer_classifier.py::TestConfidenceCalibrationCounterTests::test_high_confidence_for_clear_procedural
+FAILED tests/unit/adaptive/pacer/test_pacer_classifier.py::TestConfidenceCalibrationCounterTests::test_alternatives_for_close_classifications
+FAILED tests/unit/adaptive/pacer/test_pacer_classifier.py::TestRecommendedActionCounterTests::test_analogous_recommends_critique
+======================== 4 failed, 26 passed in 3.09s =========================

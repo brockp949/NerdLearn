@@ -13,6 +13,18 @@ from app.models.social import (
 )
 from app.models.gamification import UserAchievement
 from app.models.vector_store import CourseChunk
+from app.models.pacer import (
+    PACERType,
+    EvidenceRelationshipType,
+    BreakdownSeverity,
+    PACERContentItem,
+    AnalogyRecord,
+    EvidenceConceptLink,
+    ProceduralProgress,
+    AnalogyCritique,
+    UserPACERProfile,
+    PACERClassificationLog,
+)
 
 __all__ = [
     "User",
@@ -32,4 +44,15 @@ __all__ = [
     "UserActivity",
     "UserAchievement",
     "CourseChunk",
+    # PACER
+    "PACERType",
+    "EvidenceRelationshipType",
+    "BreakdownSeverity",
+    "PACERContentItem",
+    "AnalogyRecord",
+    "EvidenceConceptLink",
+    "ProceduralProgress",
+    "AnalogyCritique",
+    "UserPACERProfile",
+    "PACERClassificationLog",
 ]

@@ -25,6 +25,7 @@ from app.routers import (
     alga_next,
     counterfactual,
     testing,
+    pacer,
 )
 
 logger = logging.getLogger(__name__)
@@ -74,6 +75,8 @@ app.include_router(alga_next.router, prefix="/api", tags=["ALGA-Next Adaptive Le
 app.include_router(counterfactual.router, prefix="/api/counterfactual", tags=["counterfactual"])
 # Antigravity Testing: Test results and execution
 app.include_router(testing.router, prefix="/api/testing", tags=["testing"])
+# PACER Learning Protocol: Information taxonomy and type-specific learning
+app.include_router(pacer.router, prefix="/api", tags=["PACER Protocol"])
 
 
 @app.get("/")

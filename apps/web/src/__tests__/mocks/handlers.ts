@@ -325,11 +325,32 @@ const multimodalHandlers = [
 // =============================================================================
 
 const chatHandlers = [
-  http.post(`${API_BASE}/chat/`, () => {
+  // Chat endpoint (handles both with and without trailing slash)
+  http.post(`${API_BASE}/chat`, () => {
     return HttpResponse.json({
-      response: 'This is a mock response from the RAG system.',
-      sources: [],
+      message: 'This is a mock response from the RAG system.',
+      citations: [],
+      xp_earned: 5,
       confidence: 0.9,
+    });
+  }),
+
+  // Chat history - GET
+  http.get(`${API_BASE}/chat/history`, () => {
+    return HttpResponse.json({
+      messages: [
+        { role: 'user', content: 'Previous question', timestamp: '2024-01-01T00:00:00Z' },
+        { role: 'assistant', content: 'Previous answer', citations: [], timestamp: '2024-01-01T00:00:01Z' },
+      ],
+      message_count: 2,
+    });
+  }),
+
+  // Chat history - DELETE
+  http.delete(`${API_BASE}/chat/history`, () => {
+    return HttpResponse.json({
+      message: 'Chat history cleared',
+      messages_deleted: 5,
     });
   }),
 ];
